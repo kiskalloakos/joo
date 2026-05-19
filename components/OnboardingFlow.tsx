@@ -1,10 +1,24 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { saveSetup, ORDERABLE_TABS } from '../lib/setup';
 import { saveGlobalCurrency } from '../lib/currency';
 import { glowGreen } from '../lib/glows';
+import {
+  getLifetimePackage,
+  purchaseLifetime,
+  restorePurchases,
+  isUserCancelled,
+} from '../lib/purchases';
+import { notePurchase } from '../lib/access';
 
 export type { SetupData } from '../lib/setup';
 
@@ -84,6 +98,20 @@ export default function OnboardingFlow({ onComplete }: Props) {
     showNetWorth: false,
     showGoals: false,
   });
+  const [pkg, setPkg] = useState<unknown | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Loaded lazily so the price shown is the real, localized store price.
+  // null when the paywall isn't live yet (then we only show "Start trial").
+  useEffect(() => {
+    let cancelled = false;
+    getLifetimePackage().then((p) => {
+      if (!cancelled) setPkg(p);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggle = (key: TrackKey) => setTracks((t) => ({ ...t, [key]: !t[key] }));
 
@@ -102,6 +130,43 @@ export default function OnboardingFlow({ onComplete }: Props) {
       tabOrder: [...ORDERABLE_TABS],
     });
     onComplete();
+  };
+
+  const price =
+    (pkg as { product?: { priceString?: string } } | null)?.product?.priceString ??
+    '$9.99';
+
+  const buyNow = async () => {
+    if (!pkg || busy) return;
+    setBusy(true);
+    try {
+      const ok = await purchaseLifetime(pkg);
+      if (ok) {
+        notePurchase();
+        await finish();
+      }
+    } catch (e) {
+      if (!isUserCancelled(e)) {
+        // Non-fatal: let them continue into the trial instead of trapping
+        // them on onboarding.
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restore = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const ok = await restorePurchases();
+      if (ok) {
+        notePurchase();
+        await finish();
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   // ── Welcome ────────────────────────────────────────────────────────────────
@@ -129,7 +194,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
           <TouchableOpacity style={s.backBtn} onPress={() => setStep(0)}>
             <Ionicons name="chevron-back" size={20} color="#555" />
           </TouchableOpacity>
-          <Text style={s.stepDot}>1 / 2</Text>
+          <Text style={s.stepDot}>1 / 3</Text>
         </View>
 
         <View style={s.content}>
@@ -169,13 +234,14 @@ export default function OnboardingFlow({ onComplete }: Props) {
   }
 
   // ── Step 2: What do you want to track? (multi-select) ──────────────────────
-  return (
+  if (step === 2) {
+    return (
     <SafeAreaView style={s.container}>
       <View style={s.topBar}>
         <TouchableOpacity style={s.backBtn} onPress={() => setStep(1)}>
           <Ionicons name="chevron-back" size={20} color="#555" />
         </TouchableOpacity>
-        <Text style={s.stepDot}>2 / 2</Text>
+        <Text style={s.stepDot}>2 / 3</Text>
       </View>
 
       <View style={s.content}>
@@ -223,9 +289,82 @@ export default function OnboardingFlow({ onComplete }: Props) {
       </View>
 
       <View style={s.footer}>
-        <TouchableOpacity style={s.primaryBtn} onPress={finish}>
-          <Text style={s.primaryBtnText}>Done</Text>
+        <TouchableOpacity style={s.primaryBtn} onPress={() => setStep(3)}>
+          <Text style={s.primaryBtnText}>Next</Text>
         </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+    );
+  }
+
+  // ── Step 3: Trial terms (disclosure + optional buy-now) ────────────────────
+  return (
+    <SafeAreaView style={s.container}>
+      <View style={s.topBar}>
+        <TouchableOpacity style={s.backBtn} onPress={() => setStep(2)}>
+          <Ionicons name="chevron-back" size={20} color="#555" />
+        </TouchableOpacity>
+        <Text style={s.stepDot}>3 / 3</Text>
+      </View>
+
+      <View style={s.content}>
+        <Text style={s.question}>Free for{'\n'}3 days</Text>
+        <Text style={s.questionSub}>
+          Use everything, no limits. After your trial it's a one-time{' '}
+          {price} — yours forever, on every device you sign in to. No
+          subscription, ever.
+        </Text>
+
+        <View style={s.trialCard}>
+          {[
+            'Full access for 3 days, free',
+            'Then one payment — no subscription',
+            'Unlocks on every device you sign in to',
+            'All future updates included',
+          ].map((line) => (
+            <View key={line} style={s.benefitRow}>
+              <Ionicons
+                name="checkmark-circle"
+                size={18}
+                color="#00C896"
+                style={glowGreen}
+              />
+              <Text style={s.benefitText}>{line}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={s.footer}>
+        <TouchableOpacity
+          style={[s.primaryBtn, busy && s.btnDisabled]}
+          onPress={finish}
+          disabled={busy}
+        >
+          <Text style={s.primaryBtnText}>Start my 3-day free trial</Text>
+        </TouchableOpacity>
+
+        {pkg != null && (
+          <TouchableOpacity
+            style={[s.secondaryBtn, busy && s.btnDisabled]}
+            onPress={buyNow}
+            disabled={busy}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#00C896" />
+            ) : (
+              <Text style={s.secondaryText}>
+                Unlock now — {price} once
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {pkg != null && (
+          <TouchableOpacity onPress={restore} disabled={busy}>
+            <Text style={s.restoreText}>Restore purchase</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -358,4 +497,31 @@ const s = StyleSheet.create({
     elevation: 4,
   },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
+  btnDisabled: { opacity: 0.6 },
+
+  trialCard: {
+    backgroundColor: '#151515',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#222',
+    padding: 20,
+    marginTop: 4,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  benefitText: { flex: 1, fontSize: 14, color: '#CCC', fontWeight: '500' },
+
+  secondaryBtn: { alignItems: 'center', paddingVertical: 14 },
+  secondaryText: { fontSize: 15, color: '#00C896', fontWeight: '700' },
+  restoreText: {
+    fontSize: 13,
+    color: '#555',
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingVertical: 6,
+  },
 });

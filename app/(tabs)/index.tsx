@@ -38,6 +38,7 @@ import { surface } from '../../lib/surface';
 import { feedback } from '../../lib/feedback';
 import { Transaction, getTransactions, logTransaction } from '../../lib/transactions';
 import StatementSheet from '../../components/StatementSheet';
+import TrialBanner from '../../components/TrialBanner';
 import { useDragReorder } from '../../lib/useDragReorder';
 import DraggableRow from '../../components/DraggableRow';
 import SortableScroll from '../../components/SortableScroll';
@@ -337,6 +338,8 @@ export default function Dashboard() {
       </View>
 
       <SortableScroll contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <TrialBanner />
+
         {/* Hero */}
         <TouchableOpacity style={s.heroCard} onPress={openHistory} activeOpacity={0.85}>
           <View style={s.heroTopRow}>

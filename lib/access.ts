@@ -57,6 +57,39 @@ export interface AccessState {
   allowed: boolean;
   pro: boolean;
   daysLeft: number;
+  // True only when the paywall is actually live (RevenueCat configured).
+  // The trial-countdown banner keys off this so it never appears while
+  // the app is free-for-everyone (empty keys → no paywall → no banner).
+  gated: boolean;
+}
+
+// In-memory cache + subscribers, mirroring lib/setup's peek/subscribe so
+// the dashboard banner can render the trial state without re-resolving.
+let cachedAccess: AccessState | null = null;
+type Listener = (a: AccessState) => void;
+const listeners = new Set<Listener>();
+
+function publish(state: AccessState): AccessState {
+  cachedAccess = state;
+  listeners.forEach((fn) => fn(state));
+  return state;
+}
+
+export function peekAccess(): AccessState | null {
+  return cachedAccess;
+}
+
+export function subscribeAccess(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+// Called after a successful purchase anywhere (paywall, onboarding,
+// trial banner) so the rest of the UI flips to "pro" immediately.
+export function notePurchase(): void {
+  publish({ allowed: true, pro: true, daysLeft: 0, gated: true });
 }
 
 // The single source of truth used by the root layout. When the paywall
@@ -67,18 +100,19 @@ export async function resolveAccess(supabaseUserId: string): Promise<AccessState
   const daysLeft = trialDaysLeft(trialStartedAt);
 
   if (!purchasesConfigured()) {
-    return { allowed: true, pro: false, daysLeft };
+    return publish({ allowed: true, pro: false, daysLeft, gated: false });
   }
 
   await configurePurchases(supabaseUserId);
   const pro = await isProActive();
-  if (pro) return { allowed: true, pro: true, daysLeft };
+  if (pro) return publish({ allowed: true, pro: true, daysLeft, gated: true });
 
   await startTrialIfNeeded();
   const fresh = peekSetup()?.trialStartedAt ?? trialStartedAt;
-  return {
+  return publish({
     allowed: trialActive(fresh),
     pro: false,
     daysLeft: trialDaysLeft(fresh),
-  };
+    gated: true,
+  });
 }
