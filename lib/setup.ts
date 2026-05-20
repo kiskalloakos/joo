@@ -15,6 +15,8 @@ export const ORDERABLE_TABS = [
   'goals',
 ] as const;
 
+export type CashViewMode = 'single' | 'breakdown';
+
 export interface SetupData {
   completed: boolean;
   showInvestments: boolean;
@@ -27,6 +29,12 @@ export interface SetupData {
   includeDebtsInNetWorth: boolean;
   // Order of the optional tabs (route names from ORDERABLE_TABS).
   tabOrder: string[];
+  // How the dashboard renders cash accounts when they span multiple
+  // currencies. 'single' = one converted total in the display currency
+  // (today's behavior, preserved as the default). 'breakdown' = totals
+  // grouped by currency; the AFTER MONTHLY PAYMENTS hero stays in display
+  // currency either way.
+  cashViewMode: CashViewMode;
   // ISO timestamp the 3-day trial clock started, or null if not yet
   // started. Read-only here — written once by lib/access startTrial();
   // toRemote() deliberately omits it so a settings save never clobbers it.
@@ -57,7 +65,7 @@ async function fromRemote(): Promise<SetupData | null> {
   if (!uid) return null;
   const { data, error } = await supabase
     .from('user_settings')
-    .select('investment_tab_name, show_investments, show_savings, show_revenue, show_debts, show_net_worth, show_recurrings, show_goals, net_worth_include_debts, setup_completed, tab_order, trial_started_at')
+    .select('investment_tab_name, show_investments, show_savings, show_revenue, show_debts, show_net_worth, show_recurrings, show_goals, net_worth_include_debts, setup_completed, tab_order, trial_started_at, cash_view_mode')
     .eq('user_id', uid)
     .maybeSingle();
   if (error || !data) return null;
@@ -82,6 +90,12 @@ async function fromRemote(): Promise<SetupData | null> {
     showGoals: data.show_goals ?? false,
     includeDebtsInNetWorth: data.net_worth_include_debts ?? true,
     tabOrder: normalizeTabOrder(data.tab_order as string[] | null),
+    // Same shape as showRecurrings: NOT NULL post-migration, but pre-migration
+    // reads return undefined — coerce to 'single' so today's behavior holds.
+    cashViewMode:
+      (data.cash_view_mode as CashViewMode | null | undefined) === 'breakdown'
+        ? 'breakdown'
+        : 'single',
     trialStartedAt: (data.trial_started_at as string | null) ?? null,
   };
 }
@@ -105,6 +119,7 @@ async function toRemote(d: SetupData): Promise<void> {
           net_worth_include_debts: d.includeDebtsInNetWorth,
           setup_completed: d.completed,
           tab_order: normalizeTabOrder(d.tabOrder),
+          cash_view_mode: d.cashViewMode,
         },
         { onConflict: 'user_id' },
       ),

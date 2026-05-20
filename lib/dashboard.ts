@@ -9,6 +9,9 @@ export interface Account {
   name: string;
   amount: string;
   position: number;
+  // ISO 4217 code (RON/USD/EUR/GBP/HUF/CHF). Undefined on legacy rows —
+  // the dashboard treats undefined as "use the user's display currency."
+  currency?: string;
 }
 
 export interface Cost {
@@ -65,7 +68,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
   const [accountsRes, costsRes] = await Promise.all([
     supabase
       .from('accounts')
-      .select('id, name, amount, position')
+      .select('id, name, amount, position, currency')
       .eq('user_id', uid)
       .order('position', { ascending: true }),
     supabase
@@ -83,6 +86,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       name: r.name,
       amount: String(r.amount),
       position: r.position,
+      currency: r.currency ?? undefined,
     })),
     costs: (costsRes.data ?? []).map((r) => ({
       id: r.id,
@@ -164,6 +168,7 @@ export async function saveAccount(account: Account): Promise<void> {
       name: account.name,
       amount: parseFloat(account.amount) || 0,
       position: account.position,
+      currency: account.currency ?? null,
     }),
   );
 }

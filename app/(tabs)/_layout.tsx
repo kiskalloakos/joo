@@ -27,6 +27,7 @@ const DEFAULT_SETUP: SetupData = {
   showGoals: false,
   includeDebtsInNetWorth: true,
   tabOrder: [...ORDERABLE_TABS],
+  cashViewMode: 'single',
   trialStartedAt: null,
 };
 
@@ -97,6 +98,25 @@ function NativeBar({ state, navigation, position, layout }: MaterialTopTabBarPro
     [position, w],
   );
 
+  // Ghost "Settings" label on the left of the bar, only meaningful on the
+  // Dashboard (state.index === 0). Opacity collapses from 0.25 -> 0 over the
+  // first 30% of the swipe right, so by the time the strip's labels start
+  // crossing the shortcut's horizontal range, it's already invisible — no
+  // visual collision mid-swipe. Always tappable: even at 0% opacity tapping
+  // would be a no-op on non-Dashboard tabs (its area sits outside the strip's
+  // typical labels at position=0), and we don't want a stale touch area
+  // intercepting taps on other tabs anyway.
+  const settingsOpacity = useMemo(
+    () =>
+      position.interpolate({
+        inputRange: [0, 0.3, 1],
+        outputRange: [0.25, 0, 0],
+        extrapolate: 'clamp',
+      }),
+    [position],
+  );
+  const settingsTappable = state.index === 0;
+
   return (
     <View style={[styles.bar, { paddingTop: insets.top + 10 }]}>
       <View style={[styles.track, { height: PILL_H }, !ready && styles.hidden]}>
@@ -146,6 +166,23 @@ function NativeBar({ state, navigation, position, layout }: MaterialTopTabBarPro
             );
           })}
         </Animated.View>
+        <Pressable
+          style={[
+            styles.settingsShortcut,
+            { left: w / 2 - SLOT_W * 1.5, width: SLOT_W },
+          ]}
+          onPress={() => navigation.navigate('settings')}
+          pointerEvents={settingsTappable ? 'auto' : 'none'}
+          accessibilityRole="button"
+          accessibilityLabel="Go to Settings"
+        >
+          <Animated.Text
+            style={[styles.settingsShortcutText, { opacity: settingsOpacity }]}
+            numberOfLines={1}
+          >
+            Settings
+          </Animated.Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -379,5 +416,21 @@ const styles = StyleSheet.create({
   pillTextActive: {
     color: '#FFF',
     fontWeight: '700',
+  },
+  // Position + width set inline (depend on layout width). The shortcut sits
+  // one slot-width to the left of the centered active pill, matching the
+  // horizontal rhythm of the visible "next tab" (Recurrings) on the right.
+  settingsShortcut: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsShortcutText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
+    letterSpacing: 0.2,
   },
 });

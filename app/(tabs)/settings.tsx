@@ -192,6 +192,34 @@ export default function Settings() {
             )}
             <Ionicons name="chevron-forward" size={13} color="#2A2A2A" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
+          {/* "Breakdown by currency" — when ON, the Dashboard hero card
+              grows to show per-currency liquidity rows below the AFTER
+              MONTHLY PAYMENTS / Current liquidity lines. Single-currency
+              users are unaffected: the breakdown auto-hides when only
+              one currency is in play, regardless of this setting. */}
+          {setup && (
+            <TouchableOpacity
+              style={s.row}
+              onPress={async () => {
+                const next: SetupData = {
+                  ...setup,
+                  cashViewMode: setup.cashViewMode === 'single' ? 'breakdown' : 'single',
+                };
+                setSetup(next);
+                await saveSetup(next);
+              }}
+            >
+              <View style={s.rowIcon}>
+                <Ionicons name="wallet-outline" size={16} color="#555" />
+              </View>
+              <Text style={s.rowLabel}>Breakdown by currency</Text>
+              <View style={s.rowRight}>
+                <Text style={s.rowValue}>
+                  {setup.cashViewMode === 'breakdown' ? 'On' : 'Off'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Optional tabs */}

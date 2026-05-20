@@ -14,8 +14,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage, peekCurrencySettings } from '../../lib/currency';
 import { CURRENCIES } from '../../lib/currencies';
+import {
+  peekRates,
+  subscribeRates,
+  convert,
+  type Rates,
+} from '../../lib/exchangeRates';
 import {
   Account,
   Cost,
@@ -32,7 +38,7 @@ import {
 } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
 import { hintSeen, markHintSeen } from '../../lib/hints';
-import { SetupData, peekSetup, getSetup, refreshSetup, subscribeSetup } from '../../lib/setup';
+import { SetupData, peekSetup, getSetup, refreshSetup, subscribeSetup, type CashViewMode } from '../../lib/setup';
 import { glowGreen, glowAmber, glowGreenHero } from '../../lib/glows';
 import { surface } from '../../lib/surface';
 import { feedback } from '../../lib/feedback';
@@ -80,11 +86,20 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
+  // FX rates for cross-currency cash account summation. peekRates() returns
+  // IDENTITY (all 1.0) only on a cold start with no cache — _layout primes
+  // this before mounting tabs, so we seed from peek() and resubscribe.
+  const [rates, setRates] = useState<Rates>(() => peekRates());
   // Recurrings can be toggled off in Settings; when it is, the Monthly
   // Costs summary below is hidden (it taps through to that now-gone tab).
   // Hero math is intentionally unchanged — costs still exist in data.
   const [showRecurrings, setShowRecurrings] = useState(
     () => peekSetup()?.showRecurrings ?? true,
+  );
+  // Cash accounts view mode: 'single' = one converted total in the display
+  // currency (today's behavior); 'breakdown' = totals grouped by currency.
+  const [cashViewMode, setCashViewMode] = useState<CashViewMode>(
+    () => peekSetup()?.cashViewMode ?? 'single',
   );
 
   const [accountModal, setAccountModal] = useState<{ visible: boolean; editing: Account | null }>({
@@ -106,6 +121,9 @@ export default function Dashboard() {
 
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
+  const [formCurrency, setFormCurrency] = useState<string>(
+    () => peekCurrencySettings().global,
+  );
 
   const closeMoneyModal = useCallback(() => {
     setMoneyModal((prev) => ({ ...prev, visible: false }));
@@ -162,18 +180,26 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     const apply = (d: SetupData | null) => {
-      if (!cancelled && d) setShowRecurrings(d.showRecurrings);
+      if (cancelled || !d) return;
+      setShowRecurrings(d.showRecurrings);
+      setCashViewMode(d.cashViewMode);
     };
     getSetup().then(apply);
     refreshSetup().then(apply);
     const unsubscribe = subscribeSetup((d) => {
-      if (!cancelled) setShowRecurrings(d.showRecurrings);
+      if (cancelled) return;
+      setShowRecurrings(d.showRecurrings);
+      setCashViewMode(d.cashViewMode);
     });
     return () => {
       cancelled = true;
       unsubscribe();
     };
   }, []);
+
+  // Re-render when FX rates land or refresh (so cross-currency totals stay
+  // accurate without a manual reload).
+  useEffect(() => subscribeRates(setRates), []);
 
   useFocusEffect(
     useCallback(() => {
@@ -197,24 +223,45 @@ export default function Dashboard() {
   );
 
   // ── Math ──────────────────────────────────────────────────────────────────
-  const totalLiquid = accounts.reduce((s, a) => s + parseAmt(a.amount), 0);
+  // `currency` is the dashboard display currency (per-page override falling
+  // back to global). Cash accounts may now carry their own currency; we
+  // bucket them per currency, then convert each bucket into the display
+  // currency for the hero `totalLiquid`. Accounts with no per-row currency
+  // are treated as the display currency (no conversion).
+  const liquidByCcy = accounts.reduce<Record<string, number>>((acc, a) => {
+    const ccy = a.currency ?? currency;
+    acc[ccy] = (acc[ccy] ?? 0) + parseAmt(a.amount);
+    return acc;
+  }, {});
+  const totalLiquid = Object.entries(liquidByCcy).reduce(
+    (s, [ccy, amt]) => s + convert(amt, ccy, currency, rates.rates),
+    0,
+  );
   // Monthly costs only — periodic (quarterly/yearly) bills are kept out of the
   // dashboard figure on purpose and live in Recurrings' separate section.
+  // Costs stay single-currency (display currency) by design; multi-currency
+  // is limited to Cash Accounts for now.
   const monthlyCosts = costs.filter((c) => (c.intervalMonths ?? 1) === 1);
   const unpaidCosts = monthlyCosts.reduce((s, c) => (c.paid ? s : s + parseAmt(c.amount)), 0);
   const afterPayments = totalLiquid - unpaidCosts;
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
+  const symbolFor = (code: string) =>
+    CURRENCIES.find((c) => c.code === code)?.symbol ?? code + ' ';
 
   // ── Accounts ──────────────────────────────────────────────────────────────
   const openAddAccount = () => {
     setFormName('');
     setFormAmount('');
+    // New accounts default to the user's global currency. They can override
+    // per-account in the picker below.
+    setFormCurrency(peekCurrencySettings().global);
     setAccountModal({ visible: true, editing: null });
   };
 
   const openEditAccount = (account: Account) => {
     setFormName(account.name);
     setFormAmount(account.amount);
+    setFormCurrency(account.currency ?? peekCurrencySettings().global);
     setAccountModal({ visible: true, editing: account });
   };
 
@@ -222,12 +269,13 @@ export default function Dashboard() {
     if (!formName.trim()) return;
     const editing = accountModal.editing;
     const account: Account = editing
-      ? { ...editing, name: formName.trim(), amount: formAmount }
+      ? { ...editing, name: formName.trim(), amount: formAmount, currency: formCurrency }
       : {
           id: newId(),
           name: formName.trim(),
           amount: formAmount,
           position: accounts.length,
+          currency: formCurrency,
         };
     setAccounts(
       editing ? accounts.map((a) => (a.id === editing.id ? account : a)) : [...accounts, account],
@@ -236,6 +284,11 @@ export default function Dashboard() {
     feedback.success();
     await persistAccount(account);
   };
+
+  // The view-mode toggle now lives only in Settings ("Breakdown by
+  // currency"). The Dashboard reads cashViewMode and conditionally renders
+  // the per-currency breakdown INSIDE the hero card (further down). No
+  // inline button — keeps the Cash Accounts header clean.
 
   // ── Drag-to-reorder ───────────────────────────────────────────────────────
   const reorderAccounts = useCallback(async (next: Account[]) => {
@@ -254,26 +307,31 @@ export default function Dashboard() {
   const accountDrag = useDragReorder(accounts, reorderAccounts);
 
   // ── Native renderers for NestableDraggableFlatList ────────────────────────
+  // Per-account currency: amount renders with the account's own symbol
+  // (falls back to dashboard display ccy for legacy NULL rows).
   const renderAccountItem = useCallback(
-    ({ item: account, drag, isActive }: RenderItemParams<Account>) => (
-      <View style={[s.row, isActive && s.rowDragging]}>
-        {/* No visible edit affordance: tap the row to edit, long-press to
-            reorder (the 3-line handle's old job, now bound to the row). */}
-        <TouchableOpacity
-          style={s.rowBody}
-          onPress={() => openEditAccount(account)}
-          onLongPress={accounts.length > 1 ? drag : undefined}
-          delayLongPress={150}
-          activeOpacity={0.2}
-        >
-          <Text style={s.rowLabel}>{account.name}</Text>
-          <View style={s.rowRight}>
-            <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbol)}</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-    ),
-    [accounts.length, symbol],
+    ({ item: account, drag, isActive }: RenderItemParams<Account>) => {
+      const accountSymbol = symbolFor(account.currency ?? currency);
+      return (
+        <View style={[s.row, isActive && s.rowDragging]}>
+          {/* No visible edit affordance: tap the row to edit, long-press to
+              reorder (the 3-line handle's old job, now bound to the row). */}
+          <TouchableOpacity
+            style={s.rowBody}
+            onPress={() => openEditAccount(account)}
+            onLongPress={accounts.length > 1 ? drag : undefined}
+            delayLongPress={150}
+            activeOpacity={0.2}
+          >
+            <Text style={s.rowLabel}>{account.name}</Text>
+            <View style={s.rowRight}>
+              <Text style={s.rowValue}>{fmt(parseAmt(account.amount), accountSymbol)}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      );
+    },
+    [accounts.length, currency],
   );
 
   const deleteAccount = async (account: Account) => {
@@ -352,9 +410,26 @@ export default function Dashboard() {
             <Text style={s.heroSubLabel}>Current liquidity</Text>
             <Text style={s.heroSubValue}>{fmt(totalLiquid, symbol)}</Text>
           </View>
+          {/* Per-currency breakdown, only when the user has 2+ currencies in
+              play AND the Settings toggle is ON. Single-currency users see
+              the original compact hero — no clutter. */}
+          {cashViewMode === 'breakdown' && Object.keys(liquidByCcy).length > 1 && (
+            <>
+              <View style={s.heroDivider} />
+              <Text style={s.heroBreakdownLabel}>BY CURRENCY</Text>
+              {Object.entries(liquidByCcy).map(([ccy, amt]) => (
+                <View key={ccy} style={s.heroBreakdownRow}>
+                  <Text style={s.heroBreakdownCcy}>{ccy}</Text>
+                  <Text style={s.heroBreakdownValue}>{fmt(amt, symbolFor(ccy))}</Text>
+                </View>
+              ))}
+            </>
+          )}
         </TouchableOpacity>
 
-        {/* Accounts */}
+        {/* Accounts — always a flat list; rows show their own currency
+            symbol (per-account currency was the simple win). The
+            per-currency breakdown moved up into the hero card. */}
         <View style={s.card}>
           <View style={s.cardHeader}>
             <Text style={s.cardTitle}>Cash Accounts</Text>
@@ -370,6 +445,7 @@ export default function Dashboard() {
               {Platform.OS === 'web' ? (
                 accounts.map((account) => {
                   const d = accountDrag(account.id);
+                  const accountSymbol = symbolFor(account.currency ?? currency);
                   return (
                     <DraggableRow
                       key={account.id}
@@ -387,7 +463,7 @@ export default function Dashboard() {
                       >
                         <Text style={s.rowLabel}>{account.name}</Text>
                         <View style={s.rowRight}>
-                          <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbol)}</Text>
+                          <Text style={s.rowValue}>{fmt(parseAmt(account.amount), accountSymbol)}</Text>
                         </View>
                       </TouchableOpacity>
                     </DraggableRow>
@@ -450,7 +526,7 @@ export default function Dashboard() {
                 placeholderTextColor="#444"
                 autoFocus
               />
-              <Text style={s.inputLabel}>Amount ({currency})</Text>
+              <Text style={s.inputLabel}>Amount ({formCurrency})</Text>
               <TextInput
                 style={s.input}
                 value={formAmount}
@@ -459,6 +535,31 @@ export default function Dashboard() {
                 placeholderTextColor="#444"
                 keyboardType="decimal-pad"
               />
+              <Text style={s.inputLabel}>Currency</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={s.ccyPicker}
+                contentContainerStyle={s.ccyPickerContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {CURRENCIES.map((c) => (
+                  <TouchableOpacity
+                    key={c.code}
+                    style={[s.ccyPill, formCurrency === c.code && s.ccyPillActive]}
+                    onPress={() => setFormCurrency(c.code)}
+                  >
+                    <Text
+                      style={[
+                        s.ccyPillText,
+                        formCurrency === c.code && s.ccyPillTextActive,
+                      ]}
+                    >
+                      {c.code}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
               <View style={s.sheetActions}>
                 <TouchableOpacity
                   style={s.btnCancel}
@@ -898,4 +999,51 @@ const s = StyleSheet.create({
   },
   txMonthDivider: { borderTopWidth: 1, borderTopColor: '#1C1C1C' },
   txMonthLabel: { fontSize: 16, fontWeight: '600', color: '#EEE', letterSpacing: 0.3 },
+
+  // Currency picker pills inside the account add/edit modal.
+  ccyPicker: { marginBottom: 20 },
+  ccyPickerContent: { gap: 8, paddingRight: 16 },
+  ccyPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#222',
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+  },
+  ccyPillActive: {
+    backgroundColor: '#0D1F1A',
+    borderColor: '#1F3A30',
+  },
+  ccyPillText: { fontSize: 13, color: '#888', fontWeight: '600', letterSpacing: 0.4 },
+  ccyPillTextActive: { color: '#00C896' },
+
+  // Per-currency breakdown rendered INSIDE the hero card when the user has
+  // multiple currencies AND the Settings toggle is on. Hero stays compact
+  // for single-currency users by gating on Object.keys(liquidByCcy).length.
+  heroBreakdownLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#555',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+  },
+  heroBreakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  heroBreakdownCcy: {
+    fontSize: 13,
+    color: '#777',
+    fontWeight: '600',
+    letterSpacing: 0.8,
+  },
+  heroBreakdownValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#CCC',
+    fontVariant: ['tabular-nums'],
+  },
 });

@@ -241,6 +241,28 @@ export default function Recurrings() {
     setAccountPicker({ visible: true, cost });
   };
 
+  // Escape hatch: user paid by some means we don't track (cash, someone
+  // else paid, points/credits). Marks the cost paid, leaves all cash
+  // accounts untouched, and intentionally writes nothing to the money
+  // history — there's no real movement to log. The un-pay reversal flow
+  // already handles paidFromAccountId === null correctly (the refund
+  // lookup gates on truthiness), so flipping back to unpaid later is a
+  // clean no-op on balances.
+  const payWithoutDeducting = async () => {
+    const cost = accountPicker.cost;
+    if (!cost) return;
+    const updatedCost: Cost = {
+      ...cost,
+      paid: true,
+      paidFromAccountId: null,
+      paidMonth: currentMonthKey(),
+    };
+    setCosts(costs.map((c) => (c.id === cost.id ? updatedCost : c)));
+    setAccountPicker({ visible: false, cost: null });
+    feedback.success();
+    await persistCost(updatedCost);
+  };
+
   const payFromAccount = async (account: Account) => {
     const cost = accountPicker.cost;
     if (!cost) return;
@@ -583,6 +605,23 @@ export default function Recurrings() {
               </Text>
             )}
             <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+              {/* Pinned-top escape hatch: paid by some other means; leave
+                  all tracked accounts unchanged. Separator below sets it
+                  visually apart from the real-account rows beneath. */}
+              <TouchableOpacity
+                style={s.pickerRowNoDeduct}
+                onPress={payWithoutDeducting}
+                accessibilityRole="button"
+                accessibilityLabel="Mark paid without deducting from any account"
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={s.pickerName}>Don&apos;t deduct from any account</Text>
+                  <Text style={s.pickerBalance}>
+                    Paid by other means — accounts unchanged
+                  </Text>
+                </View>
+                <Ionicons name="checkmark-circle-outline" size={18} color="#666" />
+              </TouchableOpacity>
               {accounts.map((account, i) => {
                 const newBalance = accountPicker.cost
                   ? parseAmt(account.amount) - parseAmt(accountPicker.cost.amount)
@@ -807,6 +846,18 @@ const s = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 4,
+  },
+  // Pinned-top "Don't deduct" row in the cost-payment picker. Same paddings
+  // as pickerRow so the text aligns; the bottom border sets it apart from
+  // the real-account rows that follow.
+  pickerRowNoDeduct: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    marginBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F1F1F',
   },
   pickerName: { fontSize: 15, fontWeight: '600', color: '#FFF' },
   pickerBalance: { fontSize: 12, color: '#555', marginTop: 3, fontWeight: '500', fontVariant: ['tabular-nums'] },

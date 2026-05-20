@@ -35,6 +35,7 @@ import { getSavings } from '../lib/savings';
 import { getDebts } from '../lib/debts';
 import { getRevenue } from '../lib/revenue';
 import { getCurrencySettings } from '../lib/currency';
+import { getRates, refreshRatesInBackground } from '../lib/exchangeRates';
 import { resolveAccess } from '../lib/access';
 
 type Phase = 'loading' | 'signed-out' | 'recovery' | 'onboarding' | 'paywall' | 'ready';
@@ -99,8 +100,14 @@ export default function RootLayout() {
         getDebts(),
         getRevenue(),
         getCurrencySettings(),
+        // Prime FX rates from local cache so peekRates() returns real values
+        // on the dashboard's first paint. The fresh network fetch happens
+        // out-of-band (refreshRatesInBackground) and updates subscribers when
+        // it lands, so a stale cache never delays first paint.
+        getRates(),
       ]);
       if (cancelled) return;
+      refreshRatesInBackground();
       if (!setup?.completed) {
         setPhase('onboarding');
         return;

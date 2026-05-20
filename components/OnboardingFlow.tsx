@@ -128,6 +128,8 @@ export default function OnboardingFlow({ onComplete }: Props) {
       showGoals: tracks.showGoals,
       includeDebtsInNetWorth: true,
       tabOrder: [...ORDERABLE_TABS],
+      cashViewMode: 'single',
+      trialStartedAt: null,
     });
     onComplete();
   };
