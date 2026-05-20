@@ -64,44 +64,8 @@ function extractRecovery(url: string): { access: string; refresh: string } | nul
   return null;
 }
 
-// Desktop-only web styling: center the app in a 560px column so the web
-// version stops looking like a phone screen stretched across a 1440px canvas.
-// Injected at runtime because +html.tsx is silently ignored under Expo's
-// default `web.output: "single"` mode. Platform-guarded so this code path
-// is a no-op on iOS/Android — mobile rendering is byte-identical to before.
-const DESKTOP_WEB_CSS = `
-  @media (min-width: 768px) {
-    html {
-      background: radial-gradient(ellipse 1200px 800px at 50% 0%, rgba(0, 200, 150, 0.06) 0%, transparent 50%), #060606 !important;
-    }
-    body {
-      background-color: transparent !important;
-      align-items: center !important;
-    }
-    #root {
-      width: 560px !important;
-      max-width: 100% !important;
-      flex-grow: 0 !important;
-      flex-basis: auto !important;
-      flex-shrink: 0 !important;
-      background-color: #0D0D0D !important;
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 100px rgba(0, 0, 0, 0.6) !important;
-    }
-  }
-`;
-
 export default function RootLayout() {
   const [phase, setPhase] = useState<Phase>('loading');
-
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    const id = 'joo-desktop-web-styles';
-    if (document.getElementById(id)) return;
-    const style = document.createElement('style');
-    style.id = id;
-    style.textContent = DESKTOP_WEB_CSS;
-    document.head.appendChild(style);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
