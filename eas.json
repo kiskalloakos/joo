@@ -19,14 +19,18 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://cisfnfcbqrpjxabxlcli.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpc2ZuZmNicXJwanhhYnhsY2xpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1ODY5MjAsImV4cCI6MjA5NDE2MjkyMH0.m1UTG03S8j9pz6XHTEQrCX4rXZ3ES0KRMJtJzA0h5v4"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpc2ZuZmNicXJwanhhYnhsY2xpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1ODY5MjAsImV4cCI6MjA5NDE2MjkyMH0.m1UTG03S8j9pz6XHTEQrCX4rXZ3ES0KRMJtJzA0h5v4",
+        "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_uHZglUNuNcErIbBFmsKhDQTZOzl",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "REPLACE_WITH_RC_ANDROID_SDK_KEY"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://cisfnfcbqrpjxabxlcli.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpc2ZuZmNicXJwanhhYnhsY2xpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1ODY5MjAsImV4cCI6MjA5NDE2MjkyMH0.m1UTG03S8j9pz6XHTEQrCX4rXZ3ES0KRMJtJzA0h5v4"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpc2ZuZmNicXJwanhhYnhsY2xpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1ODY5MjAsImV4cCI6MjA5NDE2MjkyMH0.m1UTG03S8j9pz6XHTEQrCX4rXZ3ES0KRMJtJzA0h5v4",
+        "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_uHZglUNuNcErIbBFmsKhDQTZOzl",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "REPLACE_WITH_RC_ANDROID_SDK_KEY"
       }
     }
   },
@@ -34,8 +38,8 @@
     "production": {
       "ios": {
         "appleId": "kiskalloakos1@gmail.com",
-        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+        "ascAppId": "6771258434",
+        "appleTeamId": "LWR92K4UV6"
       },
       "android": {
         "serviceAccountKeyPath": "./play-store-service-account.json",

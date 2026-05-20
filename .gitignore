@@ -34,6 +34,15 @@ yarn-error.*
 .env
 .env*.local
 
+# store-submit credentials (never commit)
+play-store-service-account.json
+*-service-account.json
+
+# raw screenshot dumps in repo root (resized versions live in store-assets/)
+/IMG_*.PNG
+/Screenshot *.png
+/Android SS/
+
 # typescript
 *.tsbuildinfo
 
