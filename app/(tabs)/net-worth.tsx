@@ -34,6 +34,12 @@ import { showToast } from '../../lib/toast';
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { computeNetWorth } from '../../lib/finance';
+import {
+  peekRates,
+  subscribeRates,
+  convert,
+  type Rates,
+} from '../../lib/exchangeRates';
 import EmojiPicker, { ASSET_EMOJIS } from '../../components/EmojiPicker';
 
 function fmt(value: number, symbol: string): string {
@@ -47,11 +53,30 @@ function parseAmt(s: string): number {
   return isNaN(n) ? 0 : n;
 }
 
+// Cash accounts can now hold per-row currencies. To roll them into a single
+// net-worth number, bucket by each row's currency, then convert each bucket
+// into the display currency before summing. Legacy NULL-currency rows are
+// treated as already in the display currency. Investments / Savings / Debts
+// / Assets remain single-currency (scope kept to Cash for now).
+function convertCash(
+  accounts: { amount: string; currency?: string }[],
+  displayCcy: string,
+  rates: Rates['rates'],
+): number {
+  return accounts.reduce((sum, a) => {
+    const from = a.currency ?? displayCcy;
+    return sum + convert(parseAmt(a.amount), from, displayCcy, rates);
+  }, 0);
+}
+
 export default function NetWorth() {
   const insets = useSafeAreaInsets();
-  const [cash, setCash] = useState(() =>
-    peekDashboard().accounts.reduce((s, a) => s + parseAmt(a.amount), 0),
-  );
+  // We need the account-level currencies to do FX conversion, so hold onto
+  // the full list (not the pre-summed scalar the screen used before).
+  const [cashAccounts, setCashAccounts] = useState<
+    { amount: string; currency?: string }[]
+  >(() => peekDashboard().accounts);
+  const [rates, setRates] = useState<Rates>(() => peekRates());
   const [invested, setInvested] = useState(() => parseAmt(peekInvestments().totalInvested));
   const [saved, setSaved] = useState(() => parseAmt(peekSavings().totalInvested));
   const [debts, setDebts] = useState(() =>
@@ -67,9 +92,9 @@ export default function NetWorth() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      const applyDashboard = (d: { accounts: { amount: string }[] }) => {
+      const applyDashboard = (d: { accounts: { amount: string; currency?: string }[] }) => {
         if (cancelled) return;
-        setCash(d.accounts.reduce((s, a) => s + parseAmt(a.amount), 0));
+        setCashAccounts(d.accounts);
       };
       const applyInvestments = (i: { totalInvested: string }) => {
         if (cancelled) return;
@@ -104,14 +129,19 @@ export default function NetWorth() {
       getSetup().then((s) => !cancelled && s && setSetup(s));
       refreshSetup().then((s) => !cancelled && s && setSetup(s));
       const unsub = subscribeSetup((s) => !cancelled && setSetup(s));
+      const unsubRates = subscribeRates((r) => !cancelled && setRates(r));
       return () => {
         cancelled = true;
         unsub();
+        unsubRates();
       };
     }, []),
   );
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
+  // Cash bucket: convert each cash account from its own currency into the
+  // display currency (the global one for net worth) before summing.
+  const cash = convertCash(cashAccounts, currency, rates.rates);
   const assetsTotal = assets.reduce((sum, a) => sum + parseAmt(a.amount), 0);
   const {
     investmentsEnabled,
