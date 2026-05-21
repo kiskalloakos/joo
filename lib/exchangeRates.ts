@@ -1,5 +1,9 @@
-// Exchange rates — global (not user-scoped). Fetched from frankfurter.app
+// Exchange rates — global (not user-scoped). Fetched from frankfurter.dev
 // (free, no key, ECB-backed; covers RON/USD/EUR/GBP/HUF/CHF and ~30 more).
+// NOTE: the older api.frankfurter.app domain now 301-redirects to .dev, but
+// browsers refuse to follow the cross-origin redirect (CORS headers are
+// missing on the 301 response), so fetch fails silently and rates fall back
+// to identity. Always use the .dev/v1 URL directly.
 //
 // Stale-while-revalidate: the dashboard renders immediately from the
 // in-memory `cached` (which is primed from AsyncStorage at app start), and
@@ -20,7 +24,7 @@ import { showToast } from './toast';
 const BASE = 'EUR';
 const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const STORAGE_KEY = '@famescale/_global/exchange_rates_v1';
-const ENDPOINT = `https://api.frankfurter.app/latest?from=${BASE}`;
+const ENDPOINT = `https://api.frankfurter.dev/v1/latest?from=${BASE}`;
 
 export interface Rates {
   base: string;                       // 'EUR'
