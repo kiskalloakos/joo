@@ -40,7 +40,6 @@ export default function Debts() {
   const insets = useSafeAreaInsets();
   const [debts, setDebts] = useState<Debt[]>(peekDebts);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('debts'));
-  const [editMode, setEditMode] = useState(false);
 
   const [modal, setModal] = useState<{ visible: boolean; editing: Debt | null }>({
     visible: false,
@@ -185,31 +184,27 @@ export default function Debts() {
             </>
           )}
         </View>
-        {editMode && (
-          <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
-        )}
       </>
     );
   };
 
+  // No visible edit affordance: tap the row to edit, long-press to drag.
+  // Mirrors the Dashboard's Cash Accounts pattern — pencil icon removed.
   const renderDebtItem = useCallback(
     ({ item: debt, drag, isActive }: RenderItemParams<Debt>) => (
       <View style={[s.row, isActive && s.rowDragging]}>
-        {editMode && debts.length > 1 && (
-          <TouchableOpacity onLongPress={drag} delayLongPress={120} style={s.dragHandle}>
-            <Ionicons name="reorder-three-outline" size={18} color="#444" />
-          </TouchableOpacity>
-        )}
         <TouchableOpacity
           style={s.rowBody}
           onPress={() => openEdit(debt)}
+          onLongPress={debts.length > 1 ? drag : undefined}
+          delayLongPress={150}
           activeOpacity={0.6}
         >
           {rowContent(debt)}
         </TouchableOpacity>
       </View>
     ),
-    [debts.length, symbol, editMode],
+    [debts.length, symbol],
   );
 
   const removeFromModal = async () => {
@@ -254,17 +249,6 @@ export default function Debts() {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <Text style={s.cardTitle}>Outstanding</Text>
-            <TouchableOpacity
-              style={[s.headerEditBtn, editMode && s.headerEditBtnActive]}
-              onPress={() => setEditMode((e) => !e)}
-            >
-              <Ionicons
-                name="pencil-outline"
-                size={15}
-                color={editMode ? '#FFA94D' : '#777'}
-                style={editMode ? glowAmber : undefined}
-              />
-            </TouchableOpacity>
           </View>
 
           {debts.length === 0 ? (
@@ -280,14 +264,9 @@ export default function Debts() {
                   return (
                     <DraggableRow
                       key={debt.id}
-                      handlers={{ ...d, draggable: d.draggable && editMode && debts.length > 1 }}
+                      handlers={{ ...d, draggable: d.draggable && debts.length > 1 }}
                       style={[s.row, d.isDragging && s.rowDragging, d.isHovered && s.rowDropTarget]}
                     >
-                      {editMode && debts.length > 1 && (
-                        <View style={s.dragHandle}>
-                          <Ionicons name="reorder-three-outline" size={18} color="#444" />
-                        </View>
-                      )}
                       <TouchableOpacity
                         style={s.rowBody}
                         onPress={() => openEdit(debt)}
@@ -401,25 +380,6 @@ const s = StyleSheet.create({
     paddingVertical: 14,
   },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
-  headerEditBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#161616',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerEditBtnActive: {
-    backgroundColor: '#241804',
-    borderColor: '#3A2A0F',
-    shadowColor: '#FFA94D',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
-  },
   scroll: { paddingHorizontal: 16 },
 
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
@@ -463,13 +423,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 6,
-  },
-  dragHandle: {
-    width: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // @ts-ignore — web-only cursor hint
-    cursor: 'grab',
   },
   rowDragging: { opacity: 0.35 },
   rowDropTarget: { borderTopWidth: 2, borderTopColor: '#00C896' },
