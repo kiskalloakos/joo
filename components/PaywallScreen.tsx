@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,7 +80,7 @@ export default function PaywallScreen({ onUnlocked }: { onUnlocked: () => void }
     <SafeAreaView style={s.container}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.brandBlock}>
-          <Text style={s.appName}>joo</Text>
+          <Image source={require('../assets/icon.png')} style={s.brandIcon} />
           <Text style={s.tagline}>your trial has ended</Text>
         </View>
 
@@ -140,7 +141,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 },
   brandBlock: { alignItems: 'center', marginBottom: 28 },
-  appName: { fontSize: 56, fontWeight: '800', color: '#FFF', letterSpacing: -2.5, marginBottom: 8 },
+  brandIcon: { width: 118, height: 118, marginBottom: 12 },
   tagline: { fontSize: 14, color: '#666', fontWeight: '500' },
 
   card: {

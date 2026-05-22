@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -48,7 +49,7 @@ export default function SetNewPassword() {
         style={s.flex}
       >
         <View style={s.brandBlock}>
-          <Text style={s.appName}>joo</Text>
+          <Image source={require('../assets/icon.png')} style={s.brandIcon} />
           <Text style={s.tagline}>almost there — set a new password.</Text>
         </View>
 
@@ -112,13 +113,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   flex: { flex: 1 },
   brandBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  appName: {
-    fontSize: 60,
-    fontWeight: '800',
-    color: '#FFF',
-    letterSpacing: -2.5,
-    marginBottom: 10,
-  },
+  brandIcon: { width: 132, height: 132, marginBottom: 14 },
   tagline: { fontSize: 14, color: '#444', textAlign: 'center', fontWeight: '500' },
 
   form: { paddingHorizontal: 24, paddingBottom: 36 },

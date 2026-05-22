@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="mint-glow" cx="50%" cy="52%" r="58%">
+      <stop offset="0%" stop-color="#00C896" stop-opacity="0.18"/>
+      <stop offset="42%" stop-color="#00C896" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#00C896" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#151515"/>
+      <stop offset="58%" stop-color="#0D0D0D"/>
+      <stop offset="100%" stop-color="#090909"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity="0.42"/>
+    </filter>
+    <filter id="mint-shadow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="0" stdDeviation="16" flood-color="#00C896" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#0D0D0D"/>
+  <rect x="42" y="42" width="940" height="940" rx="218" fill="url(#face)"/>
+  <rect x="42" y="42" width="940" height="940" rx="218" fill="url(#mint-glow)"/>
+  <path d="M166 136C252 86 780 86 866 136" fill="none" stroke="#FFFFFF" stroke-opacity="0.035" stroke-width="2"/>
+
+  <g transform="translate(512 512) scale(0.86) translate(-512 -512)">
+    <g filter="url(#soft-shadow)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path
+        d="M306 310V620C306 715 238 778 150 752C106 739 76 707 74 663"
+        stroke="#F7F7F2"
+        stroke-width="106"
+      />
+      <circle cx="506" cy="512" r="116" stroke="#F7F7F2" stroke-width="106"/>
+      <circle cx="746" cy="512" r="116" stroke="#F7F7F2" stroke-width="106"/>
+    </g>
+
+    <g filter="url(#mint-shadow)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M671 378L730 328L790 378" stroke="#00C896" stroke-width="35"/>
+      <path d="M730 328V444" stroke="#00C896" stroke-width="35"/>
+    </g>
+  </g>
+</svg>
