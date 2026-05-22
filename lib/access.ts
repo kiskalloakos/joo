@@ -92,6 +92,24 @@ export function notePurchase(): void {
   publish({ allowed: true, pro: true, daysLeft: 0, gated: true });
 }
 
+// Complimentary access. A row in `comp_access` unlocks the app with no
+// purchase — for the developer, friends & family, press. The table is
+// readable by its owner but has NO write policy, so a comp can only be
+// granted from the Supabase dashboard (service role); it cannot be
+// self-granted from the client. See MIGRATION_comp_access.sql.
+async function hasCompAccess(uid: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('comp_access')
+      .select('user_id')
+      .eq('user_id', uid)
+      .maybeSingle();
+    return data != null;
+  } catch {
+    return false; // table absent / offline — fall through to the paywall
+  }
+}
+
 // The single source of truth used by the root layout. When the paywall
 // isn't configured yet, always allowed (app behaves as pre-paywall).
 export async function resolveAccess(supabaseUserId: string): Promise<AccessState> {
@@ -101,6 +119,12 @@ export async function resolveAccess(supabaseUserId: string): Promise<AccessState
 
   if (!purchasesConfigured()) {
     return publish({ allowed: true, pro: false, daysLeft, gated: false });
+  }
+
+  // Complimentary access overrides the paywall entirely — checked before
+  // RevenueCat so a comped account never needs a store record.
+  if (await hasCompAccess(supabaseUserId)) {
+    return publish({ allowed: true, pro: true, daysLeft, gated: true });
   }
 
   await configurePurchases(supabaseUserId);
