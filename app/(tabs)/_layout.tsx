@@ -25,6 +25,7 @@ const DEFAULT_SETUP: SetupData = {
   showNetWorth: false,
   showRecurrings: true,
   showGoals: false,
+  showProjects: false,
   includeDebtsInNetWorth: true,
   tabOrder: [...ORDERABLE_TABS],
   cashViewMode: 'single',
@@ -47,6 +48,7 @@ const TABS: {
   { name: 'debts', title: 'Debts', visible: (s) => s.showDebts },
   { name: 'net-worth', title: 'Net Worth', visible: (s) => s.showNetWorth },
   { name: 'goals', title: 'Goals', visible: (s) => s.showGoals },
+  { name: 'projects', title: 'Projects', visible: (s) => s.showProjects },
   { name: 'settings', title: 'Settings', visible: () => true },
 ];
 

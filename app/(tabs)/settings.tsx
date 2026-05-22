@@ -40,6 +40,7 @@ const TAB_TITLES: Record<string, string> = {
   debts: 'Debts',
   'net-worth': 'Net Worth',
   goals: 'Goals',
+  projects: 'Projects',
 };
 
 export default function Settings() {
@@ -133,6 +134,7 @@ export default function Settings() {
       | 'showDebts'
       | 'showNetWorth'
       | 'showGoals'
+      | 'showProjects'
       | 'showRecurrings',
   ) => {
     if (!setup) return;
@@ -258,6 +260,7 @@ export default function Settings() {
                     | 'showDebts'
                     | 'showNetWorth'
                     | 'showGoals'
+                    | 'showProjects'
                     | 'showRecurrings';
                   icon: keyof typeof Ionicons.glyphMap;
                   title: string;
@@ -304,6 +307,12 @@ export default function Settings() {
                     icon: 'flag-outline',
                     title: 'Goals',
                     desc: 'Savings & payoff targets with progress.',
+                  },
+                  {
+                    key: 'showProjects',
+                    icon: 'construct-outline',
+                    title: 'Projects',
+                    desc: 'Track what a project costs, line by line.',
                   },
                 ];
                 return items.map((item, i) => {
@@ -429,6 +438,9 @@ export default function Settings() {
                   }
                   if (setup?.showDebts) {
                     pages.push({ key: 'debts', label: 'Debts' });
+                  }
+                  if (setup?.showProjects) {
+                    pages.push({ key: 'projects', label: 'Projects' });
                   }
                   return pages.map((p, i) => {
                     const override = overrides[p.key];

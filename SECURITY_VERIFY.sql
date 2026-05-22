@@ -7,7 +7,7 @@
 -- whether every table the app writes to is actually protected in production
 -- (a migration file in the repo does NOT prove it ran here).
 --
--- PASS criteria — for ALL 10 tables:
+-- PASS criteria — for ALL 12 tables:
 --   Query 1: rls_enabled = true
 --   Query 2: exactly one policy, cmd = ALL, and BOTH qual and with_check are
 --            (auth.uid() = user_id)
@@ -30,7 +30,7 @@ select
 from (values
   ('accounts'),('costs'),('debts'),('investment_setup'),
   ('savings_setup'),('user_settings'),('revenue_entries'),('transactions'),
-  ('assets'),('goals')
+  ('assets'),('goals'),('projects'),('project_costs')
 ) as e(tbl)
 left join pg_tables t
   on t.schemaname = 'public' and t.tablename = e.tbl
@@ -48,6 +48,7 @@ from pg_policies
 where schemaname = 'public'
   and tablename in (
     'accounts','costs','debts','investment_setup',
-    'savings_setup','user_settings','revenue_entries','transactions','assets','goals'
+    'savings_setup','user_settings','revenue_entries','transactions','assets','goals',
+    'projects','project_costs'
   )
 order by tablename, policyname;

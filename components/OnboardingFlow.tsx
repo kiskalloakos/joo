@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -126,6 +127,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
       showDebts: tracks.showDebts,
       showNetWorth: tracks.showNetWorth,
       showGoals: tracks.showGoals,
+      showProjects: false,
       includeDebtsInNetWorth: true,
       tabOrder: [...ORDERABLE_TABS],
       cashViewMode: 'single',
@@ -176,7 +178,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
     return (
       <SafeAreaView style={s.container}>
         <View style={s.welcomeContent}>
-          <Text style={s.appName}>joo</Text>
+          <Image source={require('../assets/icon.png')} style={s.brandIcon} />
           <Text style={s.tagline}>your finances, simplified.</Text>
         </View>
         <View style={s.footer}>
@@ -381,13 +383,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  appName: {
-    fontSize: 68,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -2.5,
-    marginBottom: 12,
-  },
+  brandIcon: { width: 148, height: 148, marginBottom: 16 },
   tagline: { fontSize: 16, color: '#444', fontWeight: '500' },
 
   topBar: {

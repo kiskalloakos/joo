@@ -5,7 +5,7 @@ import { reportable } from './sync';
 const NS = 'currency';
 const DEFAULT_CURRENCY = 'RON';
 
-export type PageKey = 'dashboard' | 'investments' | 'savings' | 'revenue' | 'debts';
+export type PageKey = 'dashboard' | 'investments' | 'savings' | 'revenue' | 'debts' | 'projects';
 
 export interface CurrencySettings {
   global: string;
@@ -23,7 +23,7 @@ async function fromRemote(): Promise<CurrencySettings | null> {
   if (!uid) return null;
   const { data, error } = await supabase
     .from('user_settings')
-    .select('currency, dashboard_currency, investments_currency, savings_currency, revenue_currency, debts_currency')
+    .select('currency, dashboard_currency, investments_currency, savings_currency, revenue_currency, debts_currency, projects_currency')
     .eq('user_id', uid)
     .maybeSingle();
   if (error || !data) return null;
@@ -33,6 +33,7 @@ async function fromRemote(): Promise<CurrencySettings | null> {
   if (data.savings_currency) overrides.savings = data.savings_currency;
   if (data.revenue_currency) overrides.revenue = data.revenue_currency;
   if (data.debts_currency) overrides.debts = data.debts_currency;
+  if (data.projects_currency) overrides.projects = data.projects_currency;
   return { global: data.currency ?? DEFAULT_CURRENCY, overrides };
 }
 
