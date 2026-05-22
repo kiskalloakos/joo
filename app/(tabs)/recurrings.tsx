@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   peekCurrencyForPage,
   refreshCurrencyForPage,
 } from '../../lib/currency';
+import { peekRates, subscribeRates, convert, type Rates } from '../../lib/exchangeRates';
 import { surface } from '../../lib/surface';
 import {
   Account,
@@ -85,6 +86,11 @@ export default function Recurrings() {
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
   const [trackW, setTrackW] = useState(0);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
+  // FX rates: costs are in the page's display currency, but a funding cash
+  // account may hold a different one — paying converts between the two.
+  // peekRates() returns IDENTITY only on a cold start with no cache.
+  const [rates, setRates] = useState<Rates>(() => peekRates());
+  useEffect(() => subscribeRates(setRates), []);
 
   useFocusEffect(
     useCallback(() => {
@@ -176,6 +182,7 @@ export default function Recurrings() {
           dueMonth,
           paidFromAccountId: null,
           paidMonth: null,
+          paidAmount: null,
         };
     setCosts(
       editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost],
@@ -217,9 +224,15 @@ export default function Recurrings() {
         ? accounts.find((a) => a.id === cost.paidFromAccountId)
         : null;
       if (refundTo) {
+        // Refund exactly what was deducted. paidAmount is snapshotted in the
+        // account's own currency at pay time, so this is FX-drift-free and
+        // stays correct even if the cost's amount was edited while paid.
+        // Legacy rows paid before multi-currency carry no paidAmount — back
+        // then the raw cost amount was deducted as-is, so fall back to it.
+        const refund = cost.paidAmount ?? parseAmt(cost.amount);
         const updatedAccount: Account = {
           ...refundTo,
-          amount: String(parseAmt(refundTo.amount) + parseAmt(cost.amount)),
+          amount: String(parseAmt(refundTo.amount) + refund),
         };
         setAccounts(accounts.map((a) => (a.id === updatedAccount.id ? updatedAccount : a)));
         persistAccount(updatedAccount);
@@ -227,7 +240,7 @@ export default function Recurrings() {
         // instead of stacking an offsetting refund entry.
         deleteLastCostTransaction(cost.id);
       }
-      const updated: Cost = { ...cost, paid: false, paidFromAccountId: null, paidMonth: null };
+      const updated: Cost = { ...cost, paid: false, paidFromAccountId: null, paidMonth: null, paidAmount: null };
       setCosts(costs.map((c) => (c.id === cost.id ? updated : c)));
       persistCost(updated);
       feedback.select();
@@ -256,6 +269,7 @@ export default function Recurrings() {
       paid: true,
       paidFromAccountId: null,
       paidMonth: currentMonthKey(),
+      paidAmount: null,
     };
     setCosts(costs.map((c) => (c.id === cost.id ? updatedCost : c)));
     setAccountPicker({ visible: false, cost: null });
@@ -266,15 +280,22 @@ export default function Recurrings() {
   const payFromAccount = async (account: Account) => {
     const cost = accountPicker.cost;
     if (!cost) return;
+    // The cost is denominated in the page's display currency; the funding
+    // account may hold a different one. Convert into the account's currency,
+    // then snapshot the deducted figure on the cost so un-pay refunds exactly
+    // what left — no FX drift, and ledger stays in the account's currency.
+    const accountCcy = account.currency ?? currency;
+    const deducted = convert(parseAmt(cost.amount), currency, accountCcy, rates.rates);
     const updatedAccount: Account = {
       ...account,
-      amount: String(parseAmt(account.amount) - parseAmt(cost.amount)),
+      amount: String(parseAmt(account.amount) - deducted),
     };
     const updatedCost: Cost = {
       ...cost,
       paid: true,
       paidFromAccountId: account.id,
       paidMonth: currentMonthKey(),
+      paidAmount: deducted,
     };
     setAccounts(accounts.map((a) => (a.id === account.id ? updatedAccount : a)));
     setCosts(costs.map((c) => (c.id === cost.id ? updatedCost : c)));
@@ -285,7 +306,7 @@ export default function Recurrings() {
       persistCost(updatedCost),
       logTransaction({
         accountId: account.id,
-        amount: parseAmt(cost.amount),
+        amount: deducted,
         direction: 'out',
         kind: 'cost',
         referenceId: cost.id,
@@ -623,9 +644,16 @@ export default function Recurrings() {
                 <Ionicons name="checkmark-circle-outline" size={18} color="#666" />
               </TouchableOpacity>
               {accounts.map((account, i) => {
-                const newBalance = accountPicker.cost
-                  ? parseAmt(account.amount) - parseAmt(accountPicker.cost.amount)
-                  : parseAmt(account.amount);
+                // Each account renders in its OWN currency. The cost (in the
+                // page's display currency) is converted into that currency
+                // before the balance preview and the actual deduction.
+                const accountCcy = account.currency ?? currency;
+                const accountSymbol =
+                  CURRENCIES.find((c) => c.code === accountCcy)?.symbol ?? accountCcy + ' ';
+                const costInAccountCcy = accountPicker.cost
+                  ? convert(parseAmt(accountPicker.cost.amount), currency, accountCcy, rates.rates)
+                  : 0;
+                const newBalance = parseAmt(account.amount) - costInAccountCcy;
                 const goesNegative = newBalance < 0;
                 return (
                   <TouchableOpacity
@@ -636,8 +664,13 @@ export default function Recurrings() {
                     <View style={{ flex: 1 }}>
                       <Text style={s.pickerName}>{account.name}</Text>
                       <Text style={[s.pickerBalance, goesNegative && s.pickerNegative]}>
-                        {fmt(parseAmt(account.amount), symbol)} → {fmt(newBalance, symbol)}
+                        {fmt(parseAmt(account.amount), accountSymbol)} → {fmt(newBalance, accountSymbol)}
                       </Text>
+                      {accountCcy !== currency && (
+                        <Text style={s.pickerConverted}>
+                          Deducts {fmt(costInAccountCcy, accountSymbol)} ({accountCcy})
+                        </Text>
+                      )}
                     </View>
                     <Ionicons name="chevron-forward" size={16} color="#444" />
                   </TouchableOpacity>
@@ -861,5 +894,6 @@ const s = StyleSheet.create({
   },
   pickerName: { fontSize: 15, fontWeight: '600', color: '#FFF' },
   pickerBalance: { fontSize: 12, color: '#555', marginTop: 3, fontWeight: '500', fontVariant: ['tabular-nums'] },
+  pickerConverted: { fontSize: 11, color: '#777', marginTop: 3, fontWeight: '500', fontVariant: ['tabular-nums'] },
   pickerNegative: { color: '#FFA94D' },
 });

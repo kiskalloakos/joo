@@ -90,6 +90,7 @@ export interface ResettableCost {
   paid: boolean;
   paidFromAccountId?: string | null;
   paidMonth?: string | null;
+  paidAmount?: number | null;
   intervalMonths?: number;
 }
 export function resetStaleCosts<T extends ResettableCost>(
@@ -101,7 +102,7 @@ export function resetStaleCosts<T extends ResettableCost>(
     if (c.paid && c.paidMonth) {
       const period = Math.max(1, c.intervalMonths ?? 1);
       if (monthDiff(c.paidMonth, currentMonth) >= period) {
-        const cleared = { ...c, paid: false, paidFromAccountId: null, paidMonth: null };
+        const cleared = { ...c, paid: false, paidFromAccountId: null, paidMonth: null, paidAmount: null };
         reset.push(cleared);
         return cleared;
       }

@@ -25,6 +25,7 @@ export interface Cost {
   dueMonth?: number | null;              // 1–12 anchor month; only meaningful when intervalMonths !== 1
   paidFromAccountId?: string | null;     // which account funded the payment
   paidMonth?: string | null;             // "YYYY-MM" — period start; auto-reset after intervalMonths
+  paidAmount?: number | null;            // amount deducted from the funding account, in THAT account's currency; null when unpaid / paid without deducting / legacy row
 }
 
 // "YYYY-MM" key for the current calendar month.
@@ -73,7 +74,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       .order('position', { ascending: true }),
     supabase
       .from('costs')
-      .select('id, name, amount, paid, position, due_day, interval_months, due_month, paid_from_account_id, paid_month')
+      .select('id, name, amount, paid, position, due_day, interval_months, due_month, paid_from_account_id, paid_month, paid_amount')
       .eq('user_id', uid)
       .order('position', { ascending: true }),
   ]);
@@ -99,6 +100,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       dueMonth: r.due_month ?? null,
       paidFromAccountId: r.paid_from_account_id,
       paidMonth: r.paid_month,
+      paidAmount: r.paid_amount ?? null,
     })),
   };
 
@@ -123,6 +125,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
           due_month: c.dueMonth ?? null,
           paid_from_account_id: c.paidFromAccountId ?? null,
           paid_month: c.paidMonth ?? null,
+          paid_amount: c.paidAmount ?? null,
         }),
       );
     }
@@ -205,6 +208,7 @@ export async function saveCost(cost: Cost): Promise<void> {
       due_month: cost.dueMonth ?? null,
       paid_from_account_id: cost.paidFromAccountId ?? null,
       paid_month: cost.paidMonth ?? null,
+      paid_amount: cost.paidAmount ?? null,
     }),
   );
 }
