@@ -1,8 +1,21 @@
-import React, { useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Transaction } from '../lib/transactions';
+import { Account } from '../lib/dashboard';
+import { CURRENCIES } from '../lib/currencies';
+import { feedback } from '../lib/feedback';
 import { glowGreen, glowAmber } from '../lib/glows';
 
 interface Props {
@@ -11,9 +24,12 @@ interface Props {
   monthYear: number;
   monthIndex: number; // 0-11
   transactions: Transaction[]; // all tx; we filter here so caller doesn't repeat work
-  accounts: { id: string; name: string }[]; // for resolving tx → account name
+  accounts: Account[]; // for resolving tx → account name / currency
   symbol: string;
+  currency: string; // dashboard display-currency code — fallback for legacy accounts
   onClose: () => void;
+  onEditTransaction: (updated: Transaction) => void;
+  onDeleteTransaction: (tx: Transaction) => () => void; // returns an Undo closure
 }
 
 // Outflow palette — warm amber-leaning so "money out" reads coherently.
@@ -74,7 +90,10 @@ export default function StatementSheet({
   transactions,
   accounts,
   symbol,
+  currency,
   onClose,
+  onEditTransaction,
+  onDeleteTransaction,
 }: Props) {
   const { slices, totalIn, totalOut, biggest, dayTotals, monthTx } = useMemo(() => {
     const monthTx = transactions.filter((t) => {
@@ -155,7 +174,59 @@ export default function StatementSheet({
     return out;
   }, [slices, totalForDonut, cx, cy, radius]);
 
+  // ── Transaction editor ──────────────────────────────────────────────────
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const [formAmount, setFormAmount] = useState('');
+  const [formNote, setFormNote] = useState('');
+  const [formDirection, setFormDirection] = useState<'in' | 'out'>('out');
+  // Inline undo for a just-deleted row. A global toast renders BEHIND this
+  // modal on iOS, so the affordance has to live inside the sheet itself.
+  const [undo, setUndo] = useState<{ label: string; run: () => void } | null>(null);
+
+  useEffect(() => {
+    if (!undo) return;
+    const t = setTimeout(() => setUndo(null), 6000);
+    return () => clearTimeout(t);
+  }, [undo]);
+
+  const editingAccount = editing
+    ? accounts.find((a) => a.id === editing.accountId) ?? null
+    : null;
+  const editingCcy = editingAccount?.currency ?? currency;
+  const editingSymbol =
+    CURRENCIES.find((c) => c.code === editingCcy)?.symbol ?? editingCcy + ' ';
+  const formValid = parseFloat(formAmount) > 0;
+
+  const openEditor = (tx: Transaction) => {
+    feedback.tap();
+    setFormAmount(String(tx.amount));
+    setFormNote(tx.note ?? '');
+    setFormDirection(tx.direction);
+    setEditing(tx);
+  };
+  const closeEditor = () => setEditing(null);
+
+  const saveEditing = () => {
+    if (!editing || !formValid) return;
+    onEditTransaction({
+      ...editing,
+      amount: parseFloat(formAmount),
+      direction: formDirection,
+      note: formNote.trim() || null,
+    });
+    setEditing(null);
+  };
+
+  const removeEditing = () => {
+    if (!editing) return;
+    const tx = editing;
+    setEditing(null);
+    const run = onDeleteTransaction(tx);
+    setUndo({ label: tx.note ?? 'transaction', run });
+  };
+
   return (
+    <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.overlay}>
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
@@ -320,7 +391,12 @@ export default function StatementSheet({
                               ? 'added'
                               : 'removed';
                       return (
-                        <View key={tx.id} style={s.txRow}>
+                        <TouchableOpacity
+                          key={tx.id}
+                          style={s.txRow}
+                          onPress={() => openEditor(tx)}
+                          activeOpacity={0.6}
+                        >
                           <View style={{ flex: 1 }}>
                             <Text style={s.txTitle} numberOfLines={1}>
                               {tx.note ?? `${kindLabel.charAt(0).toUpperCase()}${kindLabel.slice(1)}`}
@@ -341,7 +417,8 @@ export default function StatementSheet({
                             {isIn ? '+' : '−'}
                             {fmt(tx.amount, symbol)}
                           </Text>
-                        </View>
+                          <Ionicons name="chevron-forward" size={14} color="#444" />
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
@@ -351,9 +428,154 @@ export default function StatementSheet({
               </>
             )}
           </ScrollView>
+
+          {undo && (
+            <View style={s.undoBar}>
+              <Text style={s.undoText} numberOfLines={1}>
+                Deleted {undo.label}
+              </Text>
+              <TouchableOpacity
+                style={s.undoBtn}
+                onPress={() => {
+                  undo.run();
+                  setUndo(null);
+                }}
+              >
+                <Text style={s.undoBtnText}>Undo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setUndo(null)} style={s.undoClose}>
+                <Ionicons name="close" size={14} color="#666" />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
+
+    {/* Transaction editor — manual rows get a full form; bill payments get a
+        remove-only sheet (their amount lives on the recurring itself). */}
+    <Modal
+      visible={!!editing}
+      transparent
+      animationType="slide"
+      onRequestClose={closeEditor}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <View style={s.overlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={closeEditor}
+          />
+          <View style={s.editorSheet}>
+            {editing && editing.kind === 'cost' ? (
+              <>
+                <Text style={s.editorTitle}>Bill payment</Text>
+                <Text style={s.editorBillName} numberOfLines={1}>
+                  {editing.note ?? 'Recurring bill'}
+                </Text>
+                <Text style={s.editorBillMeta}>
+                  {fmt(editing.amount, editingSymbol)}
+                  {editingAccount ? ` · ${editingAccount.name}` : ''} ·{' '}
+                  {txDateLabel(editing.createdAt)}
+                </Text>
+                <Text style={s.editorHint}>
+                  This is a recurring bill payment. Removing it marks the bill
+                  unpaid and refunds{' '}
+                  {editingAccount ? editingAccount.name : 'the account'}. To
+                  change the bill itself, edit it in Recurrings.
+                </Text>
+                <TouchableOpacity style={s.btnRemove} onPress={removeEditing}>
+                  <Ionicons name="arrow-undo-outline" size={16} color="#FFB37A" />
+                  <Text style={s.btnRemoveText}>Remove payment</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.btnCancelFull} onPress={closeEditor}>
+                  <Text style={s.btnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={s.editorTitle}>Edit transaction</Text>
+                {editing && (
+                  <Text style={s.editorBillMeta}>
+                    {editingAccount ? editingAccount.name : 'Account removed'} ·{' '}
+                    {txDateLabel(editing.createdAt)}
+                  </Text>
+                )}
+
+                <Text style={s.inputLabel}>Direction</Text>
+                <View style={s.dirRow}>
+                  {(['in', 'out'] as const).map((d) => {
+                    const on = formDirection === d;
+                    const tint = d === 'in' ? '#00C896' : '#FFA94D';
+                    return (
+                      <TouchableOpacity
+                        key={d}
+                        style={[s.dirChip, on && (d === 'in' ? s.dirChipIn : s.dirChipOut)]}
+                        onPress={() => {
+                          feedback.select();
+                          setFormDirection(d);
+                        }}
+                      >
+                        <Ionicons
+                          name={d === 'in' ? 'arrow-down' : 'arrow-up'}
+                          size={14}
+                          color={on ? tint : '#777'}
+                        />
+                        <Text style={[s.dirChipText, on && { color: tint }]}>
+                          {d === 'in' ? 'Money in' : 'Money out'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={s.inputLabel}>Amount ({editingCcy})</Text>
+                <TextInput
+                  style={s.input}
+                  value={formAmount}
+                  onChangeText={setFormAmount}
+                  placeholder="0.00"
+                  placeholderTextColor="#444"
+                  keyboardType="decimal-pad"
+                />
+
+                <Text style={s.inputLabel}>Note</Text>
+                <TextInput
+                  style={s.input}
+                  value={formNote}
+                  onChangeText={setFormNote}
+                  placeholder="Optional"
+                  placeholderTextColor="#444"
+                  maxLength={200}
+                />
+
+                <View style={s.editorActions}>
+                  <TouchableOpacity style={s.btnCancel} onPress={closeEditor}>
+                    <Text style={s.btnCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.btnSave, !formValid && s.btnSaveDisabled]}
+                    onPress={saveEditing}
+                    disabled={!formValid}
+                  >
+                    <Text style={s.btnSaveText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity style={s.deleteLink} onPress={removeEditing}>
+                  <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+                  <Text style={s.deleteLinkText}>Delete transaction</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+    </>
   );
 }
 
@@ -504,6 +726,133 @@ const s = StyleSheet.create({
   txTitle: { fontSize: 13, color: '#EEE', fontWeight: '500' },
   txMeta: { fontSize: 11, color: '#555', marginTop: 2, fontWeight: '500' },
   txAmount: { fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] },
+
+  // Transaction editor sheet
+  editorSheet: {
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 40,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: '#2C2C2C',
+  },
+  editorTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', letterSpacing: -0.3 },
+  editorBillName: { fontSize: 16, fontWeight: '600', color: '#EEE', marginTop: 10 },
+  editorBillMeta: { fontSize: 12, color: '#666', marginTop: 6, fontWeight: '500' },
+  editorHint: { fontSize: 12, color: '#777', lineHeight: 18, marginTop: 14, fontWeight: '500' },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  input: {
+    backgroundColor: '#222',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#FFF',
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+    fontWeight: '500',
+  },
+  dirRow: { flexDirection: 'row', gap: 8 },
+  dirChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: '#222',
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+  },
+  dirChipIn: { backgroundColor: '#10261F', borderColor: '#1F3A30' },
+  dirChipOut: { backgroundColor: '#241A10', borderColor: '#3A2A18' },
+  dirChipText: { fontSize: 13, color: '#777', fontWeight: '600' },
+  editorActions: { flexDirection: 'row', gap: 10, marginTop: 24 },
+  btnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#222',
+    alignItems: 'center',
+  },
+  btnCancelFull: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#222',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  btnCancelText: { fontSize: 15, color: '#888', fontWeight: '600' },
+  btnSave: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#00C896',
+    alignItems: 'center',
+  },
+  btnSaveDisabled: { opacity: 0.4 },
+  btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
+  btnRemove: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#241A10',
+    borderWidth: 1,
+    borderColor: '#3A2A18',
+    marginTop: 20,
+  },
+  btnRemoveText: { fontSize: 15, color: '#FFB37A', fontWeight: '700' },
+  deleteLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  deleteLinkText: { fontSize: 13, color: '#FF6B6B', fontWeight: '500' },
+
+  // Inline undo bar — lives inside the statement sheet (a global toast would
+  // render behind this modal on iOS).
+  undoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#222',
+    borderColor: '#333',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  undoText: { flex: 1, fontSize: 13, color: '#EEE', fontWeight: '500' },
+  undoBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#0D1F1A',
+    borderWidth: 1,
+    borderColor: '#1F3A30',
+  },
+  undoBtnText: { fontSize: 12, color: '#00C896', fontWeight: '700' },
+  undoClose: { padding: 6 },
 });
 
 // Re-export month names so caller can format if needed.

@@ -62,6 +62,54 @@ export async function deleteLastCostTransaction(referenceId: string): Promise<vo
   );
 }
 
+// Edit an existing transaction's mutable fields (amount, direction, note).
+// account_id, kind, reference_id and created_at are intentionally fixed — a
+// wrong account or a mis-dated row is fixed by delete + re-add. The CALLER is
+// responsible for the matching account-balance adjustment; this only touches
+// the ledger row. `amount > 0` is a table CHECK, so callers must validate.
+export async function updateTransaction(tx: Transaction): Promise<void> {
+  if (tx.amount <= 0) return;
+  const uid = await userId();
+  if (!uid) return;
+  await reportable(
+    supabase
+      .from('transactions')
+      .update({ amount: tx.amount, direction: tx.direction, note: tx.note ?? null })
+      .eq('id', tx.id)
+      .eq('user_id', uid),
+  );
+}
+
+// Delete one transaction by id. The caller reverses its effect on the account
+// balance (and, for a cost payment, un-pays the linked recurring).
+export async function deleteTransaction(id: string): Promise<void> {
+  const uid = await userId();
+  if (!uid) return;
+  await reportable(
+    supabase.from('transactions').delete().eq('id', id).eq('user_id', uid),
+  );
+}
+
+// Re-insert a previously deleted transaction verbatim — same id and
+// created_at — so an Undo restores it to its exact place in the log.
+export async function restoreTransaction(tx: Transaction): Promise<void> {
+  const uid = await userId();
+  if (!uid) return;
+  await reportable(
+    supabase.from('transactions').insert({
+      id: tx.id,
+      user_id: uid,
+      account_id: tx.accountId,
+      amount: tx.amount,
+      direction: tx.direction,
+      kind: tx.kind,
+      reference_id: tx.referenceId ?? null,
+      note: tx.note ?? null,
+      created_at: tx.createdAt,
+    }),
+  );
+}
+
 export async function getTransactions(limit = 500): Promise<Transaction[]> {
   const uid = await userId();
   if (!uid) return [];

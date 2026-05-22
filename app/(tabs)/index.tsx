@@ -42,7 +42,14 @@ import { SetupData, peekSetup, getSetup, refreshSetup, subscribeSetup, type Cash
 import { glowGreen, glowAmber, glowGreenHero } from '../../lib/glows';
 import { surface } from '../../lib/surface';
 import { feedback } from '../../lib/feedback';
-import { Transaction, getTransactions, logTransaction } from '../../lib/transactions';
+import {
+  Transaction,
+  getTransactions,
+  logTransaction,
+  updateTransaction,
+  deleteTransaction,
+  restoreTransaction,
+} from '../../lib/transactions';
 import StatementSheet from '../../components/StatementSheet';
 import TrialBanner from '../../components/TrialBanner';
 import { useDragReorder } from '../../lib/useDragReorder';
@@ -80,6 +87,12 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
+// Signed effect a transaction had on its account when it was created:
+// money-in raised the balance, money-out lowered it.
+function txEffect(t: Transaction): number {
+  return t.direction === 'in' ? t.amount : -t.amount;
+}
+
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -112,6 +125,12 @@ export default function Dashboard() {
   });
   const [moneyAmount, setMoneyAmount] = useState('');
   const [moneyNote, setMoneyNote] = useState('');
+  // Currency the entered amount is in. Converted into each account's own
+  // currency on commit, so adding "20 USD" to a EUR account adds the right
+  // number of euros.
+  const [moneyCurrency, setMoneyCurrency] = useState<string>(
+    () => peekCurrencySettings().global,
+  );
 
   const [historyVisible, setHistoryVisible] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -358,12 +377,17 @@ export default function Dashboard() {
     feedback.tap();
     setMoneyAmount('');
     setMoneyNote('');
+    setMoneyCurrency(peekCurrencySettings().global);
     setMoneyModal({ visible: true, mode });
   };
 
   const commitMoney = async (account: Account) => {
-    const amount = parseAmt(moneyAmount);
-    if (amount <= 0) return;
+    const entered = parseAmt(moneyAmount);
+    if (entered <= 0) return;
+    // The amount is entered in `moneyCurrency`; the account may hold another.
+    // Convert into the account's currency before applying it and logging it.
+    const accountCcy = account.currency ?? currency;
+    const amount = convert(entered, moneyCurrency, accountCcy, rates.rates);
     const direction = moneyModal.mode === 'add' ? 'in' : 'out';
     const delta = direction === 'in' ? amount : -amount;
     const updated: Account = {
@@ -380,6 +404,102 @@ export default function Dashboard() {
       logTransaction({ accountId: account.id, amount, direction, kind: 'manual', note }),
     ]);
   };
+
+  // ── Edit / delete a logged transaction (from the statement) ───────────────
+  // Editing a transaction adjusts the funding account by the difference
+  // between the new and old effect — so fixing a typo'd amount or a wrong
+  // direction also corrects the balance. account/kind/date stay fixed.
+  const handleEditTransaction = useCallback(
+    (updated: Transaction) => {
+      const original = transactions.find((t) => t.id === updated.id);
+      if (!original) return;
+      const account = accounts.find((a) => a.id === updated.accountId);
+      if (account) {
+        const delta = txEffect(updated) - txEffect(original);
+        if (delta !== 0) {
+          const next: Account = {
+            ...account,
+            amount: String(parseAmt(account.amount) + delta),
+          };
+          setAccounts((prev) => prev.map((a) => (a.id === account.id ? next : a)));
+          persistAccount(next);
+        }
+      }
+      setTransactions((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      feedback.success();
+      updateTransaction(updated);
+    },
+    [transactions, accounts],
+  );
+
+  // Deleting a transaction reverses its effect on the account balance. If it
+  // is a recurring bill's *current* payment, it also un-pays that bill
+  // (mirrors un-ticking it in Recurrings) — older cost rows in history are
+  // just removed + refunded, since the bill may since have been re-paid.
+  // Returns an undo closure that restores the row, the balance and the bill.
+  const handleDeleteTransaction = useCallback(
+    (tx: Transaction): (() => void) => {
+      const account = accounts.find((a) => a.id === tx.accountId) ?? null;
+      const refundDelta = -txEffect(tx);
+
+      let costToUnpay: Cost | null = null;
+      if (tx.kind === 'cost' && tx.referenceId) {
+        const cost = costs.find((c) => c.id === tx.referenceId) ?? null;
+        const latestCostTx = transactions
+          .filter((t) => t.kind === 'cost' && t.referenceId === tx.referenceId)
+          .reduce<Transaction | null>(
+            (latest, t) => (!latest || t.createdAt > latest.createdAt ? t : latest),
+            null,
+          );
+        if (cost && cost.paid && latestCostTx?.id === tx.id) costToUnpay = cost;
+      }
+
+      // Unmutated snapshots captured for Undo.
+      const prevAccount = account;
+      const prevCost = costToUnpay;
+
+      if (account) {
+        const next: Account = {
+          ...account,
+          amount: String(parseAmt(account.amount) + refundDelta),
+        };
+        setAccounts((prev) => prev.map((a) => (a.id === account.id ? next : a)));
+        persistAccount(next);
+      }
+      if (costToUnpay) {
+        const unpaid: Cost = {
+          ...costToUnpay,
+          paid: false,
+          paidFromAccountId: null,
+          paidMonth: null,
+          paidAmount: null,
+        };
+        setCosts((prev) => prev.map((c) => (c.id === unpaid.id ? unpaid : c)));
+        persistCost(unpaid);
+      }
+      setTransactions((prev) => prev.filter((t) => t.id !== tx.id));
+      feedback.destroy();
+      deleteTransaction(tx.id);
+
+      return () => {
+        setTransactions((prev) =>
+          prev.some((t) => t.id === tx.id)
+            ? prev
+            : [...prev, tx].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        );
+        restoreTransaction(tx);
+        if (prevAccount) {
+          setAccounts((prev) => prev.map((a) => (a.id === prevAccount.id ? prevAccount : a)));
+          persistAccount(prevAccount);
+        }
+        if (prevCost) {
+          setCosts((prev) => prev.map((c) => (c.id === prevCost.id ? prevCost : c)));
+          persistCost(prevCost);
+        }
+      };
+    },
+    [accounts, costs, transactions],
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -605,7 +725,7 @@ export default function Dashboard() {
                   <Ionicons name="close" size={20} color="#666" />
                 </TouchableOpacity>
               </View>
-              <Text style={s.inputLabel}>Amount ({currency})</Text>
+              <Text style={s.inputLabel}>Amount ({moneyCurrency})</Text>
               <TextInput
                 style={s.input}
                 value={moneyAmount}
@@ -615,8 +735,33 @@ export default function Dashboard() {
                 keyboardType="decimal-pad"
                 autoFocus
               />
+              <Text style={s.inputLabel}>Currency</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={s.ccyPicker}
+                contentContainerStyle={s.ccyPickerContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {CURRENCIES.map((c) => (
+                  <TouchableOpacity
+                    key={c.code}
+                    style={[s.ccyPill, moneyCurrency === c.code && s.ccyPillActive]}
+                    onPress={() => setMoneyCurrency(c.code)}
+                  >
+                    <Text
+                      style={[
+                        s.ccyPillText,
+                        moneyCurrency === c.code && s.ccyPillTextActive,
+                      ]}
+                    >
+                      {c.code}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
               <TextInput
-                style={[s.input, { marginTop: -8 }]}
+                style={s.input}
                 value={moneyNote}
                 onChangeText={setMoneyNote}
                 placeholder={moneyModal.mode === 'add' ? 'Optional: what for? (paycheck, refund…)' : 'Optional: what for? (groceries, rent…)'}
@@ -632,11 +777,16 @@ export default function Dashboard() {
               </Text>
               <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
                 {accounts.map((account, i) => {
-                  const amount = parseAmt(moneyAmount);
-                  const delta = moneyModal.mode === 'add' ? amount : -amount;
+                  // Each account renders in its own currency; the entered
+                  // amount (in moneyCurrency) is converted into it.
+                  const accountCcy = account.currency ?? currency;
+                  const accountSymbol = symbolFor(accountCcy);
+                  const entered = parseAmt(moneyAmount);
+                  const converted = convert(entered, moneyCurrency, accountCcy, rates.rates);
+                  const delta = moneyModal.mode === 'add' ? converted : -converted;
                   const newBalance = parseAmt(account.amount) + delta;
                   const goesNegative = newBalance < 0;
-                  const disabled = amount <= 0;
+                  const disabled = entered <= 0;
                   const isAdd = moneyModal.mode === 'add';
                   return (
                     <TouchableOpacity
@@ -652,7 +802,7 @@ export default function Dashboard() {
                       <View style={{ flex: 1 }}>
                         <Text style={s.pickerName}>{account.name}</Text>
                         <Text style={[s.pickerBalance, goesNegative && s.pickerNegative]}>
-                          {fmt(parseAmt(account.amount), symbol)} → {fmt(newBalance, symbol)}
+                          {fmt(parseAmt(account.amount), accountSymbol)} → {fmt(newBalance, accountSymbol)}
                         </Text>
                       </View>
                       <Ionicons
@@ -752,6 +902,9 @@ export default function Dashboard() {
           transactions={transactions}
           accounts={accounts}
           symbol={symbol}
+          currency={currency}
+          onEditTransaction={handleEditTransaction}
+          onDeleteTransaction={handleDeleteTransaction}
           onClose={() => setStatement((sx) => ({ ...sx, visible: false }))}
         />
       )}

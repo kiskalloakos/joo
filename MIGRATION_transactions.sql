@@ -1,5 +1,7 @@
--- Append-only money log. Every +/- on an account and every cost payment writes
--- a row. Read-only in the UI (no edit/delete) — like a bank statement.
+-- Money log. Every +/- on an account and every cost payment writes a row.
+-- Rows can later be edited or deleted from the monthly statement — the
+-- `transactions_owner` FOR ALL policy already covers UPDATE/DELETE, so no
+-- follow-up migration was needed for that.
 
 CREATE TABLE IF NOT EXISTS transactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
