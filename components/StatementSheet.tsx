@@ -226,7 +226,6 @@ export default function StatementSheet({
   };
 
   return (
-    <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.overlay}>
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
@@ -450,16 +449,17 @@ export default function StatementSheet({
           )}
         </View>
       </View>
-    </Modal>
 
-    {/* Transaction editor — manual rows get a full form; bill payments get a
-        remove-only sheet (their amount lives on the recurring itself). */}
-    <Modal
-      visible={!!editing}
-      transparent
-      animationType="slide"
-      onRequestClose={closeEditor}
-    >
+      {/* Transaction editor. Nested INSIDE the statement modal on purpose:
+          a sibling modal silently fails to present on iOS while the
+          statement modal already owns the presentation slot. Manual rows
+          get a full form; bill payments get a remove-only sheet. */}
+      <Modal
+        visible={!!editing}
+        transparent
+        animationType="slide"
+        onRequestClose={closeEditor}
+      >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -574,8 +574,8 @@ export default function StatementSheet({
           </View>
         </View>
       </KeyboardAvoidingView>
+      </Modal>
     </Modal>
-    </>
   );
 }
 

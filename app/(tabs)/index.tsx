@@ -725,57 +725,72 @@ export default function Dashboard() {
                   <Ionicons name="close" size={20} color="#666" />
                 </TouchableOpacity>
               </View>
-              <Text style={s.inputLabel}>Amount ({moneyCurrency})</Text>
-              <TextInput
-                style={s.input}
-                value={moneyAmount}
-                onChangeText={setMoneyAmount}
-                placeholder="0.00"
-                placeholderTextColor="#444"
-                keyboardType="decimal-pad"
-                autoFocus
-              />
-              <Text style={s.inputLabel}>Currency</Text>
+
+              {/* Whole body scrolls as one. Previously the fields were a flex
+                  column above an inner scroll list; with the keyboard up the
+                  column got crushed — the currency pills collapsed to slivers
+                  and the account list shrank to nothing. One ScrollView keeps
+                  every section at full size. */}
               <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={s.ccyPicker}
-                contentContainerStyle={s.ccyPickerContent}
+                style={{ flexShrink: 1 }}
                 keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                {CURRENCIES.map((c) => (
-                  <TouchableOpacity
-                    key={c.code}
-                    style={[s.ccyPill, moneyCurrency === c.code && s.ccyPillActive]}
-                    onPress={() => setMoneyCurrency(c.code)}
-                  >
-                    <Text
-                      style={[
-                        s.ccyPillText,
-                        moneyCurrency === c.code && s.ccyPillTextActive,
-                      ]}
+                <Text style={s.inputLabel}>Amount ({moneyCurrency})</Text>
+                <TextInput
+                  style={s.input}
+                  value={moneyAmount}
+                  onChangeText={setMoneyAmount}
+                  placeholder="0.00"
+                  placeholderTextColor="#444"
+                  keyboardType="decimal-pad"
+                  autoFocus
+                />
+
+                <Text style={s.inputLabel}>Currency</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={s.ccyPicker}
+                  contentContainerStyle={s.ccyPickerContent}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {CURRENCIES.map((c) => (
+                    <TouchableOpacity
+                      key={c.code}
+                      style={[s.ccyPill, moneyCurrency === c.code && s.ccyPillActive]}
+                      onPress={() => setMoneyCurrency(c.code)}
                     >
-                      {c.code}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <TextInput
-                style={s.input}
-                value={moneyNote}
-                onChangeText={setMoneyNote}
-                placeholder={moneyModal.mode === 'add' ? 'Optional: what for? (paycheck, refund…)' : 'Optional: what for? (groceries, rent…)'}
-                placeholderTextColor="#3A3A3A"
-                maxLength={200}
-              />
-              <Text style={s.pickerSub}>
-                {parseAmt(moneyAmount) > 0
-                  ? moneyModal.mode === 'add'
-                    ? 'Tap an account to add this to it.'
-                    : 'Tap an account to remove from.'
-                  : 'Enter an amount, then pick an account.'}
-              </Text>
-              <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+                      <Text
+                        style={[
+                          s.ccyPillText,
+                          moneyCurrency === c.code && s.ccyPillTextActive,
+                        ]}
+                      >
+                        {c.code}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <Text style={s.inputLabel}>Note (optional)</Text>
+                <TextInput
+                  style={s.input}
+                  value={moneyNote}
+                  onChangeText={setMoneyNote}
+                  placeholder={moneyModal.mode === 'add' ? 'What for? (paycheck, refund…)' : 'What for? (groceries, rent…)'}
+                  placeholderTextColor="#3A3A3A"
+                  maxLength={200}
+                />
+
+                <Text style={s.inputLabel}>Account</Text>
+                <Text style={s.pickerSub}>
+                  {parseAmt(moneyAmount) > 0
+                    ? moneyModal.mode === 'add'
+                      ? 'Tap an account to add this to it.'
+                      : 'Tap an account to remove from.'
+                    : 'Enter an amount, then pick an account.'}
+                </Text>
                 {accounts.map((account, i) => {
                   // Each account renders in its own currency; the entered
                   // amount (in moneyCurrency) is converted into it.
@@ -814,6 +829,7 @@ export default function Dashboard() {
                     </TouchableOpacity>
                   );
                 })}
+                <View style={{ height: 8 }} />
               </ScrollView>
             </View>
           </View>
