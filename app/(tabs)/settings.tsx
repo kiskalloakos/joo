@@ -58,6 +58,8 @@ export default function Settings() {
     view: 'list',
     page: null,
   });
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -93,6 +95,26 @@ export default function Settings() {
       Alert.alert('Sign-out failed', error.message);
     }
     // On success, RootLayout's auth listener routes to AuthScreen.
+  };
+
+  // Account deletion (App Store 5.1.1(v)). The RPC wipes every user-scoped
+  // table and deletes the auth user; we then sign out locally so the root
+  // layout's auth listener routes back to AuthScreen.
+  const deleteAccount = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.rpc('delete_my_account');
+      if (error) throw error;
+      await supabase.auth.signOut();
+    } catch (e) {
+      setDeleting(false);
+      setDeleteModal(false);
+      Alert.alert(
+        'Delete failed',
+        e instanceof Error ? e.message : 'Could not delete the account. Please try again.',
+      );
+    }
   };
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency;
@@ -346,6 +368,13 @@ export default function Settings() {
           </View>
         </View>
 
+        {/* Account deletion — kept at the bottom and dim on purpose. Apple
+            requires it to exist (5.1.1(v)); a destructive action should be
+            hard to fire accidentally. The modal handles confirmation. */}
+        <TouchableOpacity style={s.deleteRow} onPress={() => setDeleteModal(true)}>
+          <Text style={s.deleteRowText}>Delete account</Text>
+        </TouchableOpacity>
+
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -538,6 +567,39 @@ export default function Settings() {
         </View>
       </Modal>
 
+      {/* Delete Account — irreversible. Wipes every user-scoped table and
+          the auth user via the delete_my_account() RPC, then signs out. */}
+      <Modal visible={deleteModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>Delete account</Text>
+            <Text style={s.sheetSub}>
+              This permanently removes your account and every record in joo —
+              cash accounts, costs, debts, investments, savings, revenue,
+              goals, transactions, and settings. This cannot be undone.
+            </Text>
+            <View style={s.sheetActions}>
+              <TouchableOpacity
+                style={s.btnCancel}
+                onPress={() => setDeleteModal(false)}
+                disabled={deleting}
+              >
+                <Text style={s.btnCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.btnDelete}
+                onPress={deleteAccount}
+                disabled={deleting}
+              >
+                <Text style={s.btnDeleteText}>
+                  {deleting ? 'Deleting…' : 'Delete forever'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -582,6 +644,28 @@ const s = StyleSheet.create({
     backgroundColor: '#1F0D0D',
   },
   signOutText: { fontSize: 12, color: '#FF6B6B', fontWeight: '600' },
+  deleteRow: {
+    alignSelf: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  deleteRowText: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '500',
+    textDecorationLine: 'underline',
+  },
+  btnDelete: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#3A1818',
+    borderWidth: 1,
+    borderColor: '#5A2828',
+    alignItems: 'center',
+  },
+  btnDeleteText: { fontSize: 15, color: '#FF6B6B', fontWeight: '700' },
 
   sectionLabel: {
     fontSize: 10,
