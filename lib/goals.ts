@@ -1,6 +1,7 @@
 import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
+import { parseAmount } from './finance';
 
 // A manually-tracked savings/payoff target. `currentAmount` is updated by
 // hand as you make progress. `deadline` is an optional 'YYYY-MM-DD' string.
@@ -60,8 +61,8 @@ export async function saveGoal(goal: Goal): Promise<void> {
       id: goal.id,
       user_id: uid,
       name: goal.name,
-      target_amount: parseFloat(goal.targetAmount) || 0,
-      current_amount: parseFloat(goal.currentAmount) || 0,
+      target_amount: parseAmount(goal.targetAmount),
+      current_amount: parseAmount(goal.currentAmount),
       deadline: goal.deadline ?? null,
       emoji: goal.emoji ?? null,
       position: goal.position,

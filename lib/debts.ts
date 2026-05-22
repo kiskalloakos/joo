@@ -1,6 +1,7 @@
 import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
+import { parseAmount } from './finance';
 
 export interface Debt {
   id: string;
@@ -57,8 +58,8 @@ export async function saveDebt(debt: Debt): Promise<void> {
       id: debt.id,
       user_id: uid,
       name: debt.name,
-      amount: parseFloat(debt.amount) || 0,
-      paid_amount: parseFloat(debt.paidAmount) || 0,
+      amount: parseAmount(debt.amount),
+      paid_amount: parseAmount(debt.paidAmount),
       notes: debt.notes ?? null,
       position: debt.position,
     }),

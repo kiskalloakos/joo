@@ -2,7 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
-import { resetStaleCosts } from './finance';
+import { parseAmount, resetStaleCosts } from './finance';
 
 export interface Account {
   id: string;
@@ -117,7 +117,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
           id: c.id,
           user_id: uid,
           name: c.name,
-          amount: parseFloat(c.amount) || 0,
+          amount: parseAmount(c.amount),
           paid: c.paid,
           position: c.position,
           due_day: c.dueDay,
@@ -169,7 +169,7 @@ export async function saveAccount(account: Account): Promise<void> {
       id: account.id,
       user_id: uid,
       name: account.name,
-      amount: parseFloat(account.amount) || 0,
+      amount: parseAmount(account.amount),
       position: account.position,
       currency: account.currency ?? null,
     }),
@@ -200,7 +200,7 @@ export async function saveCost(cost: Cost): Promise<void> {
       id: cost.id,
       user_id: uid,
       name: cost.name,
-      amount: parseFloat(cost.amount) || 0,
+      amount: parseAmount(cost.amount),
       paid: cost.paid,
       position: cost.position,
       due_day: cost.dueDay,

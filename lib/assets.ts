@@ -1,6 +1,7 @@
 import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
+import { parseAmount } from './finance';
 
 // A manually-tracked asset (house, car, valuables…) that adds into net
 // worth. Mirrors the Debt shape; `emoji` is an optional glyph for flavour.
@@ -56,7 +57,7 @@ export async function saveAsset(asset: Asset): Promise<void> {
       id: asset.id,
       user_id: uid,
       name: asset.name,
-      amount: parseFloat(asset.amount) || 0,
+      amount: parseAmount(asset.amount),
       emoji: asset.emoji ?? null,
       position: asset.position,
     }),

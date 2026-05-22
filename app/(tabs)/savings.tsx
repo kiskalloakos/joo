@@ -24,7 +24,7 @@ import {
   saveSavings,
 } from '../../lib/savings';
 import { feedback } from '../../lib/feedback';
-import { fv, monthsSinceStart } from '../../lib/finance';
+import { fv, monthsSinceStart, parseAmount } from '../../lib/finance';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -72,13 +72,13 @@ export default function Savings() {
   );
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
-  const pv = parseFloat(data.totalInvested) || 0;
+  const pv = parseAmount(data.totalInvested) || 0;
   const sy = parseInt(data.startYear) || new Date().getFullYear();
   const sm = parseInt(data.startMonth) || 1;
   const months = monthsSinceStart(sy, sm);
   // No assumed future contributions in lump-sum mode — compound pv only.
   const pmt = data.contributeMonthly && pv > 0 ? pv / months : 0;
-  const rate = parseFloat(data.annualReturn) || 0;
+  const rate = parseAmount(data.annualReturn) || 0;
 
   const val1y = fv(pv, pmt, rate, 12);
   const val5y = fv(pv, pmt, rate, 60);

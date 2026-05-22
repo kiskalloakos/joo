@@ -2,6 +2,15 @@
 // trivially unit-testable and is the single source of truth for the growth
 // projection used by both the Investments and Savings screens.
 
+// Parse a user-typed money string into a number. The `decimal-pad` keyboard
+// shows the device locale's decimal separator, so a comma-locale user types
+// "150,66" — a bare parseFloat reads that as 150 and silently drops the
+// cents. Normalise comma → dot first. Empty / garbage → 0, never NaN.
+export function parseAmount(s: string): number {
+  const n = parseFloat(String(s).replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+
 // Months elapsed from a start (year, month) up to and including the current
 // calendar month. Always >= 1 so a brand-new plan still divides cleanly.
 export function monthsSinceStart(year: number, month: number): number {
@@ -138,6 +147,6 @@ export function annualizedPeriodicTotal(
   return costs.reduce((sum, c) => {
     const k = Math.max(1, c.intervalMonths ?? 1);
     if (k === 1) return sum;
-    return sum + (parseFloat(c.amount) || 0) * (12 / k);
+    return sum + parseAmount(c.amount) * (12 / k);
   }, 0);
 }

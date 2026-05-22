@@ -16,6 +16,7 @@ import { Transaction } from '../lib/transactions';
 import { Account } from '../lib/dashboard';
 import { CURRENCIES } from '../lib/currencies';
 import { feedback } from '../lib/feedback';
+import { parseAmount } from '../lib/finance';
 import { glowGreen, glowAmber } from '../lib/glows';
 
 interface Props {
@@ -195,7 +196,7 @@ export default function StatementSheet({
   const editingCcy = editingAccount?.currency ?? currency;
   const editingSymbol =
     CURRENCIES.find((c) => c.code === editingCcy)?.symbol ?? editingCcy + ' ';
-  const formValid = parseFloat(formAmount) > 0;
+  const formValid = parseAmount(formAmount) > 0;
 
   const openEditor = (tx: Transaction) => {
     feedback.tap();
@@ -210,7 +211,7 @@ export default function StatementSheet({
     if (!editing || !formValid) return;
     onEditTransaction({
       ...editing,
-      amount: parseFloat(formAmount),
+      amount: parseAmount(formAmount),
       direction: formDirection,
       note: formNote.trim() || null,
     });

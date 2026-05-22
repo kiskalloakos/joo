@@ -37,7 +37,7 @@ import {
   currentMonthKey,
 } from '../../lib/dashboard';
 import { logTransaction, deleteLastCostTransaction } from '../../lib/transactions';
-import { nextOccurrence, annualizedPeriodicTotal } from '../../lib/finance';
+import { nextOccurrence, annualizedPeriodicTotal, parseAmount } from '../../lib/finance';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen, glowAmber } from '../../lib/glows';
@@ -70,8 +70,7 @@ function fmt(value: number, symbol: string): string {
 }
 
 function parseAmt(s: string): number {
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
+  return parseAmount(s);
 }
 
 function ordinal(n: number): string {

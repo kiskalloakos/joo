@@ -42,6 +42,7 @@ import { SetupData, peekSetup, getSetup, refreshSetup, subscribeSetup, type Cash
 import { glowGreen, glowAmber, glowGreenHero } from '../../lib/glows';
 import { surface } from '../../lib/surface';
 import { feedback } from '../../lib/feedback';
+import { parseAmount } from '../../lib/finance';
 import {
   Transaction,
   getTransactions,
@@ -77,8 +78,7 @@ function fmt(value: number, symbol: string): string {
 }
 
 function parseAmt(s: string): number {
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
+  return parseAmount(s);
 }
 
 function ordinal(n: number): string {

@@ -20,7 +20,7 @@ import { getCurrency, peekCurrencySettings, refreshCurrency } from '../../lib/cu
 import { surface } from '../../lib/surface';
 import { newId } from '../../lib/dashboard';
 import { Goal, getGoals, peekGoals, refreshGoals, saveGoal, deleteGoal } from '../../lib/goals';
-import { goalMonthlyPace } from '../../lib/finance';
+import { goalMonthlyPace, parseAmount } from '../../lib/finance';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen } from '../../lib/glows';
@@ -32,8 +32,7 @@ function fmt(value: number, symbol: string): string {
 }
 
 function parseAmt(s: string): number {
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
+  return parseAmount(s);
 }
 
 // 'YYYY-MM-DD' <-> Date, both in LOCAL time so the picked day can't drift

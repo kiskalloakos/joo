@@ -8,6 +8,7 @@ import {
   monthDiff,
   nextOccurrence,
   annualizedPeriodicTotal,
+  parseAmount,
 } from './finance';
 
 describe('fv — future value of lump sum + monthly contributions', () => {
@@ -304,5 +305,24 @@ describe('goalMonthlyPace — set-aside per month to hit a target', () => {
   it('clamps months to >= 1 (no divide-by-zero on a same-month deadline)', () => {
     expect(goalMonthlyPace(800, 0, 0)).toBe(800);
     expect(goalMonthlyPace(800, 0, -3)).toBe(800);
+  });
+});
+
+describe('parseAmount — locale-tolerant money string parsing', () => {
+  it('parses a plain dot decimal', () => expect(parseAmount('150.66')).toBe(150.66));
+  it('parses a comma decimal (comma-locale keyboards)', () =>
+    expect(parseAmount('150,66')).toBe(150.66));
+  it('parses a whole number', () => expect(parseAmount('150')).toBe(150));
+  it('empty and garbage strings are 0, never NaN', () => {
+    expect(parseAmount('')).toBe(0);
+    expect(parseAmount('abc')).toBe(0);
+  });
+  it('a bare separator is 0, not NaN', () => {
+    expect(parseAmount(',')).toBe(0);
+    expect(parseAmount('.')).toBe(0);
+  });
+  it('leading-separator decimals work in both locales', () => {
+    expect(parseAmount(',5')).toBe(0.5);
+    expect(parseAmount('.5')).toBe(0.5);
   });
 });

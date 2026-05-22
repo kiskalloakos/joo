@@ -33,7 +33,7 @@ import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup, subscribeSetup
 import { showToast } from '../../lib/toast';
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
-import { computeNetWorth } from '../../lib/finance';
+import { computeNetWorth, parseAmount } from '../../lib/finance';
 import {
   peekRates,
   subscribeRates,
@@ -49,8 +49,7 @@ function fmt(value: number, symbol: string): string {
 }
 
 function parseAmt(s: string): number {
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
+  return parseAmount(s);
 }
 
 // Cash accounts can now hold per-row currencies. To roll them into a single

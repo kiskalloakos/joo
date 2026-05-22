@@ -34,6 +34,7 @@ import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
 import { glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
+import { parseAmount } from '../../lib/finance';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const YEAR_PICKER_RANGE = 30; // years back from current calendar year
@@ -130,11 +131,11 @@ export default function Revenue() {
     setMonthInputs((prevInputs) => prevInputs.map((v, i) => (i === idx ? value : v)));
   };
 
-  const liveTotal = monthInputs.reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
+  const liveTotal = monthInputs.reduce((sum, v) => sum + (parseAmount(v) || 0), 0);
 
   const saveEdit = async () => {
     if (!current) return;
-    const months = monthInputs.map((v) => parseFloat(v) || 0);
+    const months = monthInputs.map((v) => parseAmount(v) || 0);
     const amount = months.reduce((a, b) => a + b, 0);
     const updated: RevenueState = {
       entries: state.entries.map((e) =>
@@ -186,7 +187,7 @@ export default function Revenue() {
   const saveEntry = async () => {
     if (!formLabel.trim()) return;
     const label = formLabel.trim();
-    const amount = parseFloat(formAmount) || 0;
+    const amount = parseAmount(formAmount) || 0;
     const wasEditing = entryModal.editing;
 
     let entries: RevenueEntry[];

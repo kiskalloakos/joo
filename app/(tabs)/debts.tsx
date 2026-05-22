@@ -22,6 +22,7 @@ import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
 import { glowAmber, glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
+import { parseAmount } from '../../lib/finance';
 import { useDragReorder } from '../../lib/useDragReorder';
 import DraggableRow from '../../components/DraggableRow';
 import SortableScroll from '../../components/SortableScroll';
@@ -32,8 +33,7 @@ function fmt(value: number, symbol: string): string {
 }
 
 function parseAmt(s: string): number {
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
+  return parseAmount(s);
 }
 
 export default function Debts() {

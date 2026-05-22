@@ -1,6 +1,7 @@
 import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
+import { parseAmount } from './finance';
 
 export interface SavingsData {
   totalInvested: string;
@@ -65,10 +66,10 @@ export async function saveSavings(d: SavingsData): Promise<void> {
       .upsert(
         {
           user_id: uid,
-          total_invested: parseFloat(d.totalInvested) || 0,
+          total_invested: parseAmount(d.totalInvested),
           start_month: parseInt(d.startMonth) || 1,
           start_year: parseInt(d.startYear) || new Date().getFullYear(),
-          annual_return: parseFloat(d.annualReturn) || 5,
+          annual_return: parseAmount(d.annualReturn) || 5,
           show_projections: d.showProjections,
           contribute_monthly: d.contributeMonthly,
         },
