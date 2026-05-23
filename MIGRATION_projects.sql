@@ -15,11 +15,22 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Backfill columns for anyone who created `projects` from an earlier
+-- partial run before all columns were on the CREATE TABLE. `IF NOT EXISTS`
+-- on CREATE TABLE only skips the table — it does not reconcile columns,
+-- so we restate them as ADD COLUMN IF NOT EXISTS too. Safe on fresh installs.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS name text;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS finished boolean NOT NULL DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS projects_user_position_idx
   ON projects (user_id, position);
 
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 
+-- Postgres has no CREATE POLICY IF NOT EXISTS, so drop-then-create keeps
+-- this script idempotent (safe to re-run after a partial earlier run).
+DROP POLICY IF EXISTS projects_owner ON projects;
 CREATE POLICY projects_owner ON projects FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
@@ -39,11 +50,19 @@ CREATE TABLE IF NOT EXISTS project_costs (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Same column backfill for project_costs (see note above).
+ALTER TABLE project_costs ADD COLUMN IF NOT EXISTS label text;
+ALTER TABLE project_costs ADD COLUMN IF NOT EXISTS amount numeric NOT NULL DEFAULT 0;
+ALTER TABLE project_costs ADD COLUMN IF NOT EXISTS currency text;
+ALTER TABLE project_costs ADD COLUMN IF NOT EXISTS cost_date text;
+ALTER TABLE project_costs ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS project_costs_user_project_idx
   ON project_costs (user_id, project_id, position);
 
 ALTER TABLE project_costs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS project_costs_owner ON project_costs;
 CREATE POLICY project_costs_owner ON project_costs FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
@@ -56,3 +75,8 @@ ALTER TABLE user_settings
 -- Per-page currency override for the Projects tab (null = follow global).
 ALTER TABLE user_settings
   ADD COLUMN IF NOT EXISTS projects_currency text;
+
+-- Force PostgREST to refresh its schema cache so new columns are visible
+-- to the API immediately (otherwise the first few client calls fail with
+-- PGRST204 until the next periodic reload).
+NOTIFY pgrst, 'reload schema';

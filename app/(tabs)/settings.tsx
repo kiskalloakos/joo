@@ -358,24 +358,6 @@ export default function Settings() {
           </>
         )}
 
-        {/* About */}
-        <Text style={s.sectionLabel}>ABOUT</Text>
-        <View style={s.card}>
-          <View style={s.row}>
-            <View style={s.rowIcon}>
-              <Ionicons name="information-circle-outline" size={16} color="#555" />
-            </View>
-            <Text style={s.rowLabel}>Version</Text>
-            <Text style={s.rowValue}>1.0.0</Text>
-          </View>
-          <View style={[s.row, { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}>
-            <View style={s.rowIcon}>
-              <Ionicons name="code-slash-outline" size={16} color="#555" />
-            </View>
-            <Text style={s.rowLabel}>Built with</Text>
-            <Text style={s.rowValue}>Expo · React Native</Text>
-          </View>
-        </View>
 
         {/* Account deletion — kept at the bottom and dim on purpose. Apple
             requires it to exist (5.1.1(v)); a destructive action should be

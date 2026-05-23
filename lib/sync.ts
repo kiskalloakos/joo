@@ -12,6 +12,21 @@ function emit() {
 
 export function reportSyncError(error: unknown): void {
   const msg = error instanceof Error ? error.message : String(error);
+  // Surface the full error in the Metro terminal — the in-app pill only
+  // shows "sync failed" without context, which makes diagnosing painful.
+  // Serialize inline so it can't render as "[object Object]" and so
+  // Postgres' code/details/hint fields are always visible.
+  let serialized: string;
+  try {
+    serialized =
+      typeof error === 'object' && error !== null
+        ? JSON.stringify(error, Object.getOwnPropertyNames(error))
+        : String(error);
+  } catch {
+    serialized = String(error);
+  }
+  // eslint-disable-next-line no-console
+  console.warn(`[sync] Supabase error: ${serialized}`);
   if (status === 'failed' && lastError === msg) return;
   status = 'failed';
   lastError = msg;
@@ -40,7 +55,7 @@ export async function reportable(
 ): Promise<void> {
   try {
     const { error } = await p;
-    if (error) reportSyncError(error.message);
+    if (error) reportSyncError(error);
     else reportSyncSuccess();
   } catch (e) {
     reportSyncError(e);
