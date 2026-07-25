@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Platform, Text, TextInput } from 'react-native';
+import { ActivityIndicator, View, Platform, Text, TextInput } from 'react-native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { ThemeProvider, DarkTheme } from 'expo-router/react-navigation';
@@ -36,6 +36,8 @@ import { resolveAccess } from '../lib/access';
 import { getProjects, refreshProjects } from '../lib/projects';
 import { getTransactions, refreshTransactions } from '../lib/transactions';
 import { getWealthVisibility } from '../lib/wealth';
+import { getDropdowns } from '../lib/dropdowns';
+import { getAssets, refreshAssets } from '../lib/assets';
 import { setCachedUserEmail } from '../lib/userProfile';
 
 type Phase = 'loading' | 'signed-out' | 'recovery' | 'onboarding' | 'paywall' | 'ready';
@@ -118,6 +120,8 @@ export default function RootLayout() {
         getProjects(),
         getTransactions(),
         getWealthVisibility(),
+        getDropdowns(),
+        getAssets(),
         // Prime FX rates from local cache so peekRates() returns real values
         // on the dashboard's first paint. The fresh network fetch happens
         // out-of-band (refreshRatesInBackground) and updates subscribers when
@@ -139,6 +143,7 @@ export default function RootLayout() {
         refreshTransactions(),
         refreshCurrencySettings(),
         refreshSetup(),
+        refreshAssets(),
       ]);
       if (!setup?.completed) {
         setPhase('onboarding');
@@ -225,7 +230,13 @@ export default function RootLayout() {
   }, []);
 
   if (!fontsLoaded || phase === 'loading') {
-    return <View style={{ flex: 1, backgroundColor: '#0D0D0D' }} />;
+    return (
+      <View
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0D0D0D' }}
+      >
+        <ActivityIndicator size="small" color="#8E8E93" />
+      </View>
+    );
   }
 
   if (phase === 'signed-out') {

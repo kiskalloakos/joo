@@ -37,11 +37,16 @@ import {
   deleteProjectCost,
 } from '../../lib/projects';
 import { registerProjectsHeaderAction } from '../../lib/projectsHeaderActions';
+import { getDropdowns, peekDropdown, saveDropdown } from '../../lib/dropdowns';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function projectDropdownKey(projectId: string): string {
+  return `projects-card-${projectId}`;
 }
 
 function symbolFor(code: string): string {
@@ -73,15 +78,31 @@ export default function Projects() {
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('projects'));
   const [rates, setRates] = useState<Rates>(() => peekRates());
   // Which project card is expanded (its costs shown). One at a time.
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(
+    () => peekProjects().projects.find((project) => peekDropdown(projectDropdownKey(project.id)))?.id ?? null,
+  );
   // Whether the "Previous projects" (finished) section is open.
-  const [prevExpanded, setPrevExpanded] = useState(false);
+  const [prevExpanded, setPrevExpanded] = useState(() => peekDropdown('projects-previous'));
+
+  const applyDropdowns = useCallback((projects: ProjectsData, values: Record<string, boolean>) => {
+    setPrevExpanded(values['projects-previous'] ?? false);
+    const openProject = projects.projects.find((project) => values[projectDropdownKey(project.id)]);
+    setExpanded(openProject?.id ?? null);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      getProjects().then((d) => !cancelled && setData(d));
-      refreshProjects().then((d) => !cancelled && setData(d));
+      getProjects().then((d) => {
+        if (cancelled) return;
+        setData(d);
+        getDropdowns().then((values) => !cancelled && applyDropdowns(d, values));
+      });
+      refreshProjects().then((d) => {
+        if (cancelled) return;
+        setData(d);
+        getDropdowns().then((values) => !cancelled && applyDropdowns(d, values));
+      });
       getCurrencyForPage('projects').then((c) => !cancelled && setCurrency(c));
       refreshCurrencyForPage('projects').then((c) => !cancelled && setCurrency(c));
       const unsub = subscribeRates((r) => !cancelled && setRates(r));
@@ -89,7 +110,7 @@ export default function Projects() {
         cancelled = true;
         unsub();
       };
-    }, []),
+    }, [applyDropdowns]),
   );
 
   const symbol = symbolFor(currency);
@@ -157,7 +178,10 @@ export default function Projects() {
       projects: d.projects.filter((x) => x.id !== p.id),
       costs: d.costs.filter((c) => c.projectId !== p.id),
     }));
-    if (expanded === p.id) setExpanded(null);
+    if (expanded === p.id) {
+      setExpanded(null);
+      void saveDropdown(projectDropdownKey(p.id), false);
+    }
     feedback.destroy();
     await deleteProject(p.id);
     showToast(`Deleted ${p.name}`, {
@@ -185,7 +209,7 @@ export default function Projects() {
     feedback.success();
     if (updated.finished) {
       setExpanded(null);
-      setPrevExpanded(true);
+      void saveDropdown(projectDropdownKey(p.id), false);
       showToast(`${p.name} moved to previous projects`, { label: 'Got it', onPress: () => {} });
     }
     await saveProject(updated);
@@ -294,7 +318,10 @@ export default function Projects() {
           style={s.cardHeader}
           onPress={() => {
             feedback.select();
-            setExpanded(isOpen ? null : project.id);
+            const next = isOpen ? null : project.id;
+            setExpanded(next);
+            void saveDropdown(projectDropdownKey(project.id), !isOpen);
+            if (!isOpen && expanded) void saveDropdown(projectDropdownKey(expanded), false);
           }}
         >
           <View style={{ flex: 1 }}>
@@ -373,7 +400,9 @@ export default function Projects() {
                   style={s.prevHeader}
                   onPress={() => {
                     feedback.select();
-                    setPrevExpanded((v) => !v);
+                    const next = !prevExpanded;
+                    setPrevExpanded(next);
+                    void saveDropdown('projects-previous', next);
                   }}
                 >
                   <Text style={s.prevHeaderText}>Previous projects</Text>

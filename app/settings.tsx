@@ -23,6 +23,7 @@ import { glowGreen } from '../lib/glows';
 import { CURRENCIES } from '../lib/currencies';
 import { peekCachedUserEmail, setCachedUserEmail } from '../lib/userProfile';
 import { getTabVisibility, peekTabVisibility, saveTabVisibility, type OptionalTab, type TabVisibility } from '../lib/tabVisibility';
+import { feedback } from '../lib/feedback';
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
@@ -91,6 +92,7 @@ export default function Settings() {
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency;
 
   const changeCurrency = async (code: string) => {
+    feedback.select();
     setCurrency(code);
     await saveGlobalCurrency(code);
     setCurrencyModal(false);
@@ -98,6 +100,7 @@ export default function Settings() {
 
   const selectedCurrency = CURRENCIES.find((c) => c.code === currency);
   const toggleTab = async (tab: OptionalTab) => {
+    feedback.select();
     const next = { ...tabVisibility, [tab]: !tabVisibility[tab] };
     setTabVisibility(next);
     await saveTabVisibility(next);
@@ -115,7 +118,7 @@ export default function Settings() {
           </View>
           <Text style={s.profileName}>{email ?? 'Your Profile'}</Text>
           <Text style={s.profileSub}>joo · personal finance</Text>
-          <TouchableOpacity style={s.signOutBtn} onPress={signOut}>
+          <TouchableOpacity style={s.signOutBtn} onPress={() => { feedback.tap(); signOut(); }}>
             <Ionicons name="log-out-outline" size={14} color="#FF6B6B" />
             <Text style={s.signOutText}>Sign Out</Text>
           </TouchableOpacity>
@@ -142,7 +145,7 @@ export default function Settings() {
         {/* Preferences */}
         <Text style={s.sectionLabel}>PREFERENCES</Text>
         <View style={s.card}>
-          <TouchableOpacity style={s.row} onPress={() => setCurrencyModal(true)}>
+          <TouchableOpacity style={s.row} onPress={() => { feedback.tap(); setCurrencyModal(true); }}>
             <View style={s.rowIcon}>
               <Ionicons name="cash-outline" size={16} color="#555" />
             </View>
@@ -158,7 +161,7 @@ export default function Settings() {
         {/* Account deletion — kept at the bottom and dim on purpose. Apple
             requires it to exist (5.1.1(v)); a destructive action should be
             hard to fire accidentally. The modal handles confirmation. */}
-        <TouchableOpacity style={s.deleteRow} onPress={() => setDeleteModal(true)}>
+        <TouchableOpacity style={s.deleteRow} onPress={() => { feedback.destroy(); setDeleteModal(true); }}>
           <Text style={s.deleteRowText}>Delete account</Text>
         </TouchableOpacity>
 

@@ -1,11 +1,12 @@
 import { Stack } from 'expo-router/stack';
 import { usePathname, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { triggerHomeMoneyAction } from '../../lib/homeHeaderActions';
 import { triggerProjectsHeaderAction } from '../../lib/projectsHeaderActions';
 import { triggerBusinessHeaderAction } from '../../lib/businessHeaderActions';
 import { getTabVisibility, peekTabVisibility, subscribeTabVisibility, type TabVisibility } from '../../lib/tabVisibility';
+import { feedback } from '../../lib/feedback';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -13,11 +14,16 @@ export default function TabLayout() {
   const isHome = pathname === '/' || pathname === '/index';
   const isBusiness = pathname === '/business';
   const isProjects = pathname === '/projects';
+  const previousPathname = useRef(pathname);
   const [visibility, setVisibility] = useState<TabVisibility>(peekTabVisibility);
   useEffect(() => {
     getTabVisibility().then(setVisibility);
     return subscribeTabVisibility(setVisibility);
   }, []);
+  useEffect(() => {
+    if (previousPathname.current !== pathname) feedback.select();
+    previousPathname.current = pathname;
+  }, [pathname]);
   const tabKey = Object.entries(visibility).filter(([, shown]) => shown).map(([name]) => name).join('-');
 
   return (
@@ -61,28 +67,28 @@ export default function TabLayout() {
         </NativeTabs.Trigger>
       </NativeTabs>
       <Stack.Toolbar placement="left">
-        <Stack.Toolbar.Button icon="gearshape" onPress={() => router.push('/settings')} />
+        <Stack.Toolbar.Button icon="gearshape" onPress={() => { feedback.tap(); router.push('/settings'); }} />
       </Stack.Toolbar>
       {isHome && (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button
             icon="minus"
-            onPress={() => triggerHomeMoneyAction('remove')}
+            onPress={() => { feedback.tap(); triggerHomeMoneyAction('remove'); }}
           />
           <Stack.Toolbar.Button
             icon="plus"
-            onPress={() => triggerHomeMoneyAction('add')}
+            onPress={() => { feedback.tap(); triggerHomeMoneyAction('add'); }}
           />
         </Stack.Toolbar>
       )}
       {isBusiness && (
         <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button icon="plus" onPress={triggerBusinessHeaderAction} />
+          <Stack.Toolbar.Button icon="plus" onPress={() => { feedback.tap(); triggerBusinessHeaderAction(); }} />
         </Stack.Toolbar>
       )}
       {isProjects && (
         <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button icon="plus" onPress={triggerProjectsHeaderAction} />
+          <Stack.Toolbar.Button icon="plus" onPress={() => { feedback.tap(); triggerProjectsHeaderAction(); }} />
         </Stack.Toolbar>
       )}
     </>

@@ -11,19 +11,20 @@ import { getSetup } from './setup';
 import { getTransactions } from './transactions';
 import { getTabVisibility } from './tabVisibility';
 import { getWealthVisibility } from './wealth';
+import { getAssets } from './assets';
 
 /** Creates a portable JSON snapshot and opens the system share sheet. */
 export async function exportBackup(): Promise<boolean> {
   if (!(await Sharing.isAvailableAsync())) return false;
-  const [dashboard, currency, debts, investments, projects, revenue, savings, setup, tabVisibility, transactions, wealth] = await Promise.all([
+  const [dashboard, currency, debts, investments, projects, revenue, savings, setup, tabVisibility, transactions, wealth, assets] = await Promise.all([
     getDashboard(), getCurrencySettings(), getDebts(), getInvestments(), getProjects(), getRevenue(),
-    getSavings(), getSetup(), getTabVisibility(), getTransactions(), getWealthVisibility(),
+    getSavings(), getSetup(), getTabVisibility(), getTransactions(), getWealthVisibility(), getAssets(),
   ]);
   const snapshot = {
     format: 'joo-backup',
     version: 1,
     exportedAt: new Date().toISOString(),
-    data: { dashboard, currency, debts, investments, projects, revenue, savings, setup, tabVisibility, transactions, wealth },
+    data: { dashboard, currency, debts, investments, projects, revenue, savings, setup, tabVisibility, transactions, wealth, assets },
   };
   const uri = `${FileSystem.cacheDirectory}joo-backup-${Date.now()}.json`;
   await FileSystem.writeAsStringAsync(uri, JSON.stringify(snapshot, null, 2), {

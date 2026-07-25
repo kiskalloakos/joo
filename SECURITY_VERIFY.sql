@@ -30,7 +30,7 @@ select
 from (values
   ('accounts'),('costs'),('debts'),('investment_setup'),
   ('savings_setup'),('user_settings'),('revenue_entries'),('transactions'),
-  ('projects'),('project_costs')
+  ('projects'),('project_costs'),('assets')
 ) as e(tbl)
 left join pg_tables t
   on t.schemaname = 'public' and t.tablename = e.tbl
@@ -49,6 +49,6 @@ where schemaname = 'public'
   and tablename in (
     'accounts','costs','debts','investment_setup',
     'savings_setup','user_settings','revenue_entries','transactions',
-    'projects','project_costs'
+    'projects','project_costs','assets'
   )
 order by tablename, policyname;

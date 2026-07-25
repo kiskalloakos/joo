@@ -41,6 +41,7 @@ import { nextOccurrence, parseAmount } from '../../lib/finance';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen, glowAmber } from '../../lib/glows';
+import { getDropdowns, peekDropdown, saveDropdown } from '../../lib/dropdowns';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -101,6 +102,10 @@ export default function Recurrings({
   // account may hold a different one — paying converts between the two.
   // peekRates() returns IDENTITY only on a cold start with no cache.
   const [rates, setRates] = useState<Rates>(() => peekRates());
+  const monthlyKey = `recurrings-${accountType}-monthly`;
+  const periodicKey = `recurrings-${accountType}-periodic`;
+  const [monthlyExpanded, setMonthlyExpanded] = useState(() => peekDropdown(monthlyKey));
+  const [periodicExpanded, setPeriodicExpanded] = useState(() => peekDropdown(periodicKey));
   useEffect(() => subscribeRates(setRates), []);
 
   useFocusEffect(
@@ -124,10 +129,16 @@ export default function Recurrings({
       refreshCurrencyForPage('dashboard').then((c) => {
         if (!cancelled) setCurrency(c);
       });
+      getDropdowns().then((value) => {
+        if (!cancelled) {
+          setMonthlyExpanded(value[monthlyKey] ?? false);
+          setPeriodicExpanded(value[periodicKey] ?? false);
+        }
+      });
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [monthlyKey, periodicKey]),
   );
 
   // ── Add / edit / delete ───────────────────────────────────────────────────
@@ -142,9 +153,6 @@ export default function Recurrings({
   const [formMode, setFormMode] = useState<FreqMode>('monthly');
   const [formCustomN, setFormCustomN] = useState('2');
   const [formDueMonth, setFormDueMonth] = useState(new Date().getMonth() + 1);
-  const [monthlyExpanded, setMonthlyExpanded] = useState(true);
-  const [periodicExpanded, setPeriodicExpanded] = useState(true);
-
   // The effective interval the form currently represents.
   const formInterval =
     formMode === 'custom'
@@ -449,7 +457,12 @@ export default function Recurrings({
 
         {/* Monthly */}
         <View style={s.card}>
-          <TouchableOpacity style={s.cardHeader} onPress={() => setMonthlyExpanded((value) => !value)} activeOpacity={0.7}>
+          <TouchableOpacity style={s.cardHeader} onPress={() => {
+            feedback.select();
+            const next = !monthlyExpanded;
+            setMonthlyExpanded(next);
+            void saveDropdown(monthlyKey, next);
+          }} activeOpacity={0.7}>
             <View>
               <Text style={s.cardTitle}>{accountType === 'business' ? 'Monthly payments' : 'Monthly'}</Text>
               <Text style={s.cardSub}>{fmt(total, symbol)}/mo · {monthlyCosts.length} {monthlyCosts.length === 1 ? 'bill' : 'bills'}</Text>
@@ -478,7 +491,12 @@ export default function Recurrings({
             folded into the monthly figure above. */}
         {periodicCosts.length > 0 && (
           <View style={[s.card, { marginTop: 14 }]}>
-            <TouchableOpacity style={s.cardHeader} onPress={() => setPeriodicExpanded((value) => !value)} activeOpacity={0.7}>
+            <TouchableOpacity style={s.cardHeader} onPress={() => {
+              feedback.select();
+              const next = !periodicExpanded;
+              setPeriodicExpanded(next);
+              void saveDropdown(periodicKey, next);
+            }} activeOpacity={0.7}>
               <View>
                 <Text style={s.cardTitle}>{accountType === 'business' ? 'Periodic payments' : 'Periodic'}</Text>
                 <Text style={s.cardSub}>

@@ -31,6 +31,8 @@ import {
   type WealthVisibility,
 } from '../../lib/wealth';
 import Savings from './savings';
+import { getDropdowns, peekDropdown, saveDropdown } from '../../lib/dropdowns';
+import NetWorthSection from '../../components/NetWorthSection';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -45,7 +47,7 @@ function fmtFull(value: number, symbol: string): string {
 export default function Investments() {
   const [data, setData] = useState<InvestmentData>(peekInvestments);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('investments'));
-  const [yearlyExpanded, setYearlyExpanded] = useState(true);
+  const [yearlyExpanded, setYearlyExpanded] = useState(() => peekDropdown('investments-yearly'));
   const [visibility, setVisibility] = useState<WealthVisibility>(peekWealthVisibility);
   const [visibilityModal, setVisibilityModal] = useState(false);
 
@@ -76,6 +78,9 @@ export default function Investments() {
       });
       getWealthVisibility().then((value) => {
         if (!cancelled) setVisibility(value);
+      });
+      getDropdowns().then((value) => {
+        if (!cancelled) setYearlyExpanded(value['investments-yearly'] ?? false);
       });
       return () => {
         cancelled = true;
@@ -135,6 +140,7 @@ export default function Investments() {
   };
 
   const toggleSection = async (section: keyof WealthVisibility) => {
+    feedback.select();
     const next = { ...visibility, [section]: !visibility[section] };
     setVisibility(next);
     await saveWealthVisibility(next);
@@ -213,7 +219,12 @@ export default function Investments() {
           <View style={s.card}>
             <TouchableOpacity
               style={s.collapseHeader}
-              onPress={() => setYearlyExpanded(!yearlyExpanded)}
+              onPress={() => {
+                feedback.select();
+                const next = !yearlyExpanded;
+                setYearlyExpanded(next);
+                void saveDropdown('investments-yearly', next);
+              }}
               activeOpacity={0.7}
             >
               <Text style={s.cardTitle}>Yearly Breakdown</Text>
@@ -250,7 +261,9 @@ export default function Investments() {
           <Savings embedded />
         </>}
 
-        {!visibility.showInvestments && !visibility.showSavings && (
+        {visibility.showNetWorth && <NetWorthSection currency={currency} />}
+
+        {!visibility.showInvestments && !visibility.showSavings && !visibility.showNetWorth && (
           <View style={s.emptyWealth}>
             <Text style={s.emptyWealthText}>No Wealth sections are shown.</Text>
             <TouchableOpacity onPress={() => setVisibilityModal(true)}>
@@ -418,6 +431,15 @@ export default function Investments() {
               </View>
               <View style={[s.switch, visibility.showSavings && s.switchOn]}>
                 <View style={[s.switchKnob, visibility.showSavings && s.switchKnobOn]} />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.visibilityRow} onPress={() => toggleSection('showNetWorth')}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.toggleTitle}>Net Worth</Text>
+                <Text style={s.toggleHint}>Cash, investments, savings, assets, and debts</Text>
+              </View>
+              <View style={[s.switch, visibility.showNetWorth && s.switchOn]}>
+                <View style={[s.switchKnob, visibility.showNetWorth && s.switchKnobOn]} />
               </View>
             </TouchableOpacity>
             <TouchableOpacity style={s.closeBtn} onPress={() => setVisibilityModal(false)}>

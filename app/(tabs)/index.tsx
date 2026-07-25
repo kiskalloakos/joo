@@ -9,6 +9,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native';
 import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from 'expo-router';
@@ -131,6 +132,7 @@ export default function Dashboard() {
     () => peekCurrencySettings().global,
   );
   const [formAccountType, setFormAccountType] = useState<'personal' | 'business'>('personal');
+  const [formIncludeInLiquidity, setFormIncludeInLiquidity] = useState(true);
 
   const closeMoneyModal = useCallback(() => {
     setMoneyModal((prev) => ({ ...prev, visible: false }));
@@ -205,12 +207,19 @@ export default function Dashboard() {
   const personalAccounts = sortedAccounts.filter((account) => account.accountType !== 'business');
   const businessAccounts = sortedAccounts.filter((account) => account.accountType === 'business');
   const hasAccountGroups = personalAccounts.length > 0 && businessAccounts.length > 0;
-  // Home is deliberately personal-only. Business account cash belongs to the
-  // Business page and must never inflate the user's available personal money.
+  // Personal accounts always contribute. Business accounts contribute by
+  // default too, unless the user explicitly keeps one separate in Money.
   const personalLiquid = personalAccounts.reduce(
     (sum, account) => sum + convert(parseAmt(account.amount), account.currency ?? currency, currency, rates.rates),
     0,
   );
+  const includedBusinessLiquid = businessAccounts
+    .filter((account) => account.includeInLiquidity !== false)
+    .reduce(
+      (sum, account) => sum + convert(parseAmt(account.amount), account.currency ?? currency, currency, rates.rates),
+      0,
+    );
+  const currentLiquidity = personalLiquid + includedBusinessLiquid;
   // Monthly costs only — periodic (quarterly/yearly) bills are kept out of the
   // dashboard figure on purpose and live in Recurrings' separate section.
   const monthlyCosts = costs.filter(
@@ -226,7 +235,7 @@ export default function Dashboard() {
   );
   const monthlyPaid = Math.max(0, monthlyCostTotal - unpaidCosts);
   const monthlyProgress = monthlyCostTotal > 0 ? Math.min(1, monthlyPaid / monthlyCostTotal) : 0;
-  const afterPayments = personalLiquid - unpaidCosts;
+  const afterPayments = currentLiquidity - unpaidCosts;
   const showAfterPayments = tabVisibility.recurrings && unpaidCosts > 0;
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
   const symbolFor = (code: string) =>
@@ -240,6 +249,7 @@ export default function Dashboard() {
     // per-account in the picker below.
     setFormCurrency(peekCurrencySettings().global);
     setFormAccountType('personal');
+    setFormIncludeInLiquidity(true);
     setAccountModal({ visible: true, editing: null });
   };
 
@@ -248,6 +258,7 @@ export default function Dashboard() {
     setFormAmount(account.amount);
     setFormCurrency(account.currency ?? peekCurrencySettings().global);
     setFormAccountType(account.accountType ?? 'personal');
+    setFormIncludeInLiquidity(account.includeInLiquidity !== false);
     setAccountModal({ visible: true, editing: account });
   };
 
@@ -255,7 +266,7 @@ export default function Dashboard() {
     if (!formName.trim()) return;
     const editing = accountModal.editing;
     const account: Account = editing
-      ? { ...editing, name: formName.trim(), amount: formAmount, currency: formCurrency, accountType: formAccountType }
+      ? { ...editing, name: formName.trim(), amount: formAmount, currency: formCurrency, accountType: formAccountType, includeInLiquidity: formIncludeInLiquidity }
       : {
           id: newId(),
           name: formName.trim(),
@@ -263,6 +274,7 @@ export default function Dashboard() {
           position: accounts.length,
           currency: formCurrency,
           accountType: formAccountType,
+          includeInLiquidity: formIncludeInLiquidity,
         };
     setAccounts(
       editing ? accounts.map((a) => (a.id === editing.id ? account : a)) : [...accounts, account],
@@ -444,11 +456,11 @@ export default function Dashboard() {
             <View style={s.heroDivider} />
             <View style={s.heroRow}>
               <Text style={s.heroSubLabel}>Current liquidity</Text>
-              <Text style={s.heroSubValue}>{fmt(personalLiquid, symbol)}</Text>
+              <Text style={s.heroSubValue}>{fmt(currentLiquidity, symbol)}</Text>
             </View>
           </> : <>
             <Text style={s.heroLabel}>CURRENT LIQUIDITY</Text>
-            <Text style={s.heroAmount}>{fmt(personalLiquid, symbol)}</Text>
+            <Text style={s.heroAmount}>{fmt(currentLiquidity, symbol)}</Text>
           </>}
           {tabVisibility.recurrings && monthlyCostTotal > 0 && <>
             <View style={s.paymentProgressHeader}>
@@ -576,6 +588,21 @@ export default function Dashboard() {
                   </TouchableOpacity>
                 ))}
               </View>
+              {formAccountType === 'business' && (
+                <View style={s.liquidityToggleRow}>
+                  <View style={s.liquidityToggleCopy}>
+                    <Text style={s.liquidityToggleTitle}>Show in current liquidity</Text>
+                    <Text style={s.liquidityToggleHint}>Include this account with your personal money on Home.</Text>
+                  </View>
+                  <Switch
+                    value={formIncludeInLiquidity}
+                    onValueChange={setFormIncludeInLiquidity}
+                    trackColor={{ false: '#333', true: '#00C896' }}
+                    thumbColor="#F5F5F5"
+                    ios_backgroundColor="#333"
+                  />
+                </View>
+              )}
               <View style={s.sheetActions}>
                 <TouchableOpacity
                   style={s.btnCancel}
@@ -1094,6 +1121,10 @@ const s = StyleSheet.create({
   accountTypeOptionActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
   accountTypeText: { color: '#999', fontSize: 13, fontWeight: '600' },
   accountTypeTextActive: { color: '#07120F' },
+  liquidityToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 14, marginTop: -8, marginBottom: 20, borderRadius: 12, backgroundColor: '#191919', borderWidth: 1, borderColor: '#292929' },
+  liquidityToggleCopy: { flex: 1 },
+  liquidityToggleTitle: { color: '#EEE', fontSize: 14, fontWeight: '600' },
+  liquidityToggleHint: { color: '#777', fontSize: 12, lineHeight: 17, marginTop: 3 },
 
   // Per-currency breakdown rendered INSIDE the hero card when the user has
   // multiple currencies AND the Settings toggle is on. Hero stays compact

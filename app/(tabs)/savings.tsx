@@ -25,6 +25,7 @@ import {
 } from '../../lib/savings';
 import { feedback } from '../../lib/feedback';
 import { fv, monthsSinceStart, parseAmount } from '../../lib/finance';
+import { getDropdowns, peekDropdown, saveDropdown } from '../../lib/dropdowns';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -40,7 +41,7 @@ export default function Savings({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<SavingsData>(peekSavings);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('savings'));
-  const [yearlyExpanded, setYearlyExpanded] = useState(true);
+  const [yearlyExpanded, setYearlyExpanded] = useState(() => peekDropdown('savings-yearly'));
 
   const [editVisible, setEditVisible] = useState(false);
   const [formTotal, setFormTotal] = useState('');
@@ -65,6 +66,9 @@ export default function Savings({ embedded = false }: { embedded?: boolean }) {
       });
       refreshCurrencyForPage('savings').then((c) => {
         if (!cancelled) setCurrency(c);
+      });
+      getDropdowns().then((value) => {
+        if (!cancelled) setYearlyExpanded(value['savings-yearly'] ?? false);
       });
       return () => {
         cancelled = true;
@@ -188,7 +192,12 @@ export default function Savings({ embedded = false }: { embedded?: boolean }) {
           <View style={s.card}>
             <TouchableOpacity
               style={s.collapseHeader}
-              onPress={() => setYearlyExpanded(!yearlyExpanded)}
+              onPress={() => {
+                feedback.select();
+                const next = !yearlyExpanded;
+                setYearlyExpanded(next);
+                void saveDropdown('savings-yearly', next);
+              }}
               activeOpacity={0.7}
             >
               <Text style={s.cardTitle}>Yearly Breakdown</Text>

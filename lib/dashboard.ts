@@ -14,6 +14,8 @@ export interface Account {
   currency?: string;
   /** Personal is the safe default for every existing account. */
   accountType?: 'personal' | 'business';
+  /** Personal accounts always count; business accounts may be kept separate. */
+  includeInLiquidity?: boolean;
 }
 
 export interface Cost {
@@ -74,7 +76,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
   const [accountsRes, costsRes] = await Promise.all([
     supabase
       .from('accounts')
-      .select('id, name, amount, position, currency, account_type')
+      .select('id, name, amount, position, currency, account_type, include_in_liquidity')
       .eq('user_id', uid)
       .order('position', { ascending: true }),
     supabase
@@ -94,6 +96,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       position: r.position,
       currency: r.currency ?? undefined,
       accountType: r.account_type === 'business' ? 'business' : 'personal',
+      includeInLiquidity: r.include_in_liquidity !== false,
     })),
     costs: (costsRes.data ?? []).map((r) => ({
       id: r.id,
@@ -183,6 +186,7 @@ export async function saveAccount(account: Account): Promise<void> {
       position: account.position,
       currency: account.currency ?? null,
       account_type: account.accountType ?? 'personal',
+      include_in_liquidity: account.includeInLiquidity ?? true,
     }),
   );
 }

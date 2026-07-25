@@ -24,6 +24,7 @@ import { glowAmber, glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { parseAmount } from '../../lib/finance';
 import { convert, peekRates, subscribeRates, type Rates } from '../../lib/exchangeRates';
+import { getDropdowns, peekDropdown, saveDropdown } from '../../lib/dropdowns';
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -47,7 +48,7 @@ export default function Debts() {
   const [formPaid, setFormPaid] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formCurrency, setFormCurrency] = useState(() => peekCurrencyForPage('debts'));
-  const [clearedExpanded, setClearedExpanded] = useState(false);
+  const [clearedExpanded, setClearedExpanded] = useState(() => peekDropdown('debts-cleared'));
 
   useFocusEffect(
     useCallback(() => {
@@ -63,6 +64,9 @@ export default function Debts() {
       });
       refreshCurrencyForPage('debts').then((c) => {
         if (!cancelled) setCurrency(c);
+      });
+      getDropdowns().then((value) => {
+        if (!cancelled) setClearedExpanded(value['debts-cleared'] ?? false);
       });
       return () => {
         cancelled = true;
@@ -248,7 +252,9 @@ export default function Debts() {
               style={s.clearedHeader}
               onPress={() => {
                 feedback.select();
-                setClearedExpanded((value) => !value);
+                const next = !clearedExpanded;
+                setClearedExpanded(next);
+                void saveDropdown('debts-cleared', next);
               }}
             >
               <Text style={s.clearedHeaderText}>Cleared debts</Text>
