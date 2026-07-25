@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   TouchableOpacity,
   Modal,
@@ -11,7 +10,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
@@ -29,12 +28,15 @@ import {
   previousEntry,
   currentEntry,
   activeMonthCount,
+  monthTotals,
+  type RevenueIncome,
 } from '../../lib/revenue';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
 import { glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { parseAmount } from '../../lib/finance';
+import { registerRevenueHeaderAction } from '../../lib/revenueHeaderActions';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const YEAR_PICKER_RANGE = 30; // years back from current calendar year
@@ -44,11 +46,12 @@ function fmt(value: number, symbol: string): string {
 }
 
 export default function Revenue() {
-  const insets = useSafeAreaInsets();
   const [state, setState] = useState<RevenueState | null>(peekRevenue);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('revenue'));
   const [editVisible, setEditVisible] = useState(false);
-  const [monthInputs, setMonthInputs] = useState<string[]>(Array(12).fill(''));
+  const [monthInputs, setMonthInputs] = useState<{ id: string; name: string; amount: string }[][]>(
+    Array.from({ length: 12 }, () => []),
+  );
 
   // Add/edit a year
   const [entryModal, setEntryModal] = useState<{ visible: boolean; editing: RevenueEntry | null }>({
@@ -58,6 +61,10 @@ export default function Revenue() {
   const [formLabel, setFormLabel] = useState('');
   const [formAmount, setFormAmount] = useState('');
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [quickAddVisible, setQuickAddVisible] = useState(false);
+  const [quickSource, setQuickSource] = useState('');
+  const [quickAmount, setQuickAmount] = useState('');
+  const [quickCurrency, setQuickCurrency] = useState(() => peekCurrencyForPage('revenue'));
 
   useFocusEffect(
     useCallback(() => {
@@ -81,14 +88,14 @@ export default function Revenue() {
   );
 
   if (!state) {
-    return <View style={[s.container, { paddingBottom: insets.bottom }]} />;
+    return <View style={s.container} collapsable={false} />;
   }
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
   const current = currentEntry(state);
   const currentLabel = current?.label ?? String(new Date().getFullYear());
   const currentAmount = current?.amount ?? 0;
-  const currentMonths = current?.months;
+  const currentMonths = monthTotals(current?.months);
   const prev = previousEntry(state);
   const total = allTimeTotal(state.entries);
 
@@ -118,25 +125,84 @@ export default function Revenue() {
     }
   }
 
-  const openEdit = () => {
-    const seed = currentMonths
-      ? currentMonths.map((m) => (m > 0 ? String(m) : ''))
-      : Array(12).fill('');
+  const openEdit = useCallback(() => {
+    const seed = Array.from({ length: 12 }, (_, index) =>
+      (current?.months?.[index] ?? []).map((income) => ({
+        id: income.id,
+        name: income.name,
+        amount: income.amount > 0 ? String(income.amount) : '',
+      })),
+    );
     setMonthInputs(seed);
     feedback.tap();
     setEditVisible(true);
+  }, [current]);
+
+  const openQuickAdd = useCallback(() => {
+    setQuickSource('');
+    setQuickAmount('');
+    setQuickCurrency(currency);
+    setQuickAddVisible(true);
+  }, [currency]);
+
+  useFocusEffect(useCallback(() => registerRevenueHeaderAction(openQuickAdd), [openQuickAdd]));
+
+  const saveQuickRevenue = async () => {
+    if (!current || !quickSource.trim() || !(parseAmount(quickAmount) > 0)) return;
+    const monthIndex = new Date().getMonth();
+    const months = Array.from({ length: 12 }, (_, index) =>
+      index === monthIndex
+        ? [...(current.months?.[index] ?? []), { id: newId(), name: quickSource.trim(), amount: parseAmount(quickAmount), currency: quickCurrency }]
+        : current.months?.[index] ?? [],
+    );
+    const amount = monthTotals(months).reduce((sum, value) => sum + value, 0);
+    const updated = { entries: state.entries.map((entry) => entry.id === current.id ? { ...entry, amount, months } : entry) };
+    setState(updated);
+    setQuickAddVisible(false);
+    await saveRevenue(updated);
   };
 
-  const updateMonth = (idx: number, value: string) => {
-    setMonthInputs((prevInputs) => prevInputs.map((v, i) => (i === idx ? value : v)));
+  const updateIncome = (monthIndex: number, incomeId: string, key: 'name' | 'amount', value: string) => {
+    setMonthInputs((previous) =>
+      previous.map((month, index) =>
+        index === monthIndex
+          ? month.map((income) => income.id === incomeId ? { ...income, [key]: value } : income)
+          : month,
+      ),
+    );
   };
 
-  const liveTotal = monthInputs.reduce((sum, v) => sum + (parseAmount(v) || 0), 0);
+  const addIncome = (monthIndex: number) => {
+    setMonthInputs((previous) =>
+      previous.map((month, index) =>
+        index === monthIndex ? [...month, { id: newId(), name: '', amount: '' }] : month,
+      ),
+    );
+  };
+
+  const removeIncome = (monthIndex: number, incomeId: string) => {
+    setMonthInputs((previous) =>
+      previous.map((month, index) => index === monthIndex ? month.filter((income) => income.id !== incomeId) : month),
+    );
+  };
+
+  const liveTotal = monthInputs.reduce(
+    (sum, month) => sum + month.reduce((monthSum, income) => monthSum + (parseAmount(income.amount) || 0), 0),
+    0,
+  );
 
   const saveEdit = async () => {
     if (!current) return;
-    const months = monthInputs.map((v) => parseAmount(v) || 0);
-    const amount = months.reduce((a, b) => a + b, 0);
+    const months = monthInputs.map((month) =>
+      month
+        .map((income): RevenueIncome => ({
+          id: income.id,
+          name: income.name.trim() || 'Income',
+          amount: parseAmount(income.amount) || 0,
+        }))
+        .filter((income) => income.amount > 0),
+    );
+    const amount = monthTotals(months).reduce((sum, value) => sum + value, 0);
     const updated: RevenueState = {
       entries: state.entries.map((e) =>
         e.id === current.id ? { ...e, amount, months } : e,
@@ -255,7 +321,7 @@ export default function Revenue() {
   };
 
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom }]}>
+    <View style={s.container} collapsable={false}>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* New-year reminder banner */}
@@ -335,7 +401,7 @@ export default function Revenue() {
         )}
 
         {/* Monthly breakdown peek */}
-        {currentMonths && currentMonths.some((m) => m > 0) && (
+        {currentMonths.some((m) => m > 0) && (
           <View style={s.breakdownCard}>
             <Text style={s.breakdownTitle}>This year, by month</Text>
             <View style={s.breakdownGrid}>
@@ -399,18 +465,37 @@ export default function Revenue() {
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {MONTHS.map((m, i) => (
-                  <View key={m} style={s.monthRow}>
-                    <Text style={s.monthLabel}>{m}</Text>
-                    <Text style={s.currencyHint}>{symbol.trim()}</Text>
-                    <TextInput
-                      style={s.monthInput}
-                      value={monthInputs[i]}
-                      onChangeText={(v) => updateMonth(i, v)}
-                      placeholder="0"
-                      placeholderTextColor="#333"
-                      keyboardType="decimal-pad"
-                    />
+                {MONTHS.map((month, monthIndex) => (
+                  <View key={month} style={s.monthGroup}>
+                    <View style={s.monthGroupHeader}>
+                      <Text style={s.monthLabel}>{month}</Text>
+                      <TouchableOpacity style={s.addIncomeBtn} onPress={() => addIncome(monthIndex)}>
+                        <Ionicons name="add" size={15} color="#00C896" />
+                        <Text style={s.addIncomeText}>Income</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {monthInputs[monthIndex].map((income) => (
+                      <View key={income.id} style={s.incomeRow}>
+                        <TextInput
+                          style={s.incomeNameInput}
+                          value={income.name}
+                          onChangeText={(value) => updateIncome(monthIndex, income.id, 'name', value)}
+                          placeholder="Source"
+                          placeholderTextColor="#444"
+                        />
+                        <TextInput
+                          style={s.incomeAmountInput}
+                          value={income.amount}
+                          onChangeText={(value) => updateIncome(monthIndex, income.id, 'amount', value)}
+                          placeholder="0"
+                          placeholderTextColor="#333"
+                          keyboardType="decimal-pad"
+                        />
+                        <TouchableOpacity onPress={() => removeIncome(monthIndex, income.id)} hitSlop={8}>
+                          <Ionicons name="remove-circle-outline" size={18} color="#666" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
                   </View>
                 ))}
               </ScrollView>
@@ -499,6 +584,21 @@ export default function Revenue() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={quickAddVisible} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={s.overlay}><View style={s.sheet}>
+            <Text style={s.sheetTitle}>Add Revenue</Text>
+            <Text style={s.inputLabel}>Where did it come from?</Text>
+            <TextInput style={s.input} value={quickSource} onChangeText={setQuickSource} placeholder="e.g. Salary, freelance client" placeholderTextColor="#444" autoFocus />
+            <Text style={s.inputLabel}>Currency</Text>
+            <View style={s.currencyGrid}>{CURRENCIES.map((item) => <TouchableOpacity key={item.code} style={[s.currencyPill, quickCurrency === item.code && s.currencyPillActive]} onPress={() => setQuickCurrency(item.code)}><Text style={[s.currencyPillText, quickCurrency === item.code && s.currencyPillTextActive]}>{item.symbol} {item.code}</Text></TouchableOpacity>)}</View>
+            <Text style={s.inputLabel}>Amount ({quickCurrency})</Text>
+            <TextInput style={s.input} value={quickAmount} onChangeText={setQuickAmount} placeholder="0.00" placeholderTextColor="#444" keyboardType="decimal-pad" />
+            <View style={s.sheetActions}><TouchableOpacity style={s.btnCancel} onPress={() => setQuickAddVisible(false)}><Text style={s.btnCancelText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={s.btnSave} onPress={saveQuickRevenue}><Text style={s.btnSaveText}>Add</Text></TouchableOpacity></View>
+          </View></View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -507,7 +607,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   header: { paddingHorizontal: 20, paddingVertical: 14 },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
-  scroll: { paddingHorizontal: 16 },
+  scroll: { paddingHorizontal: 16, paddingTop: 112 },
 
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 12 },
   heroYear: { fontSize: 14, color: '#666', fontWeight: '600', letterSpacing: 1 },
@@ -642,6 +742,11 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 8,
   },
+  currencyGrid: { flexDirection: 'row', flexWrap: 'nowrap', gap: 4, marginBottom: 16 },
+  currencyPill: { flex: 1, minWidth: 0, paddingHorizontal: 4, paddingVertical: 8, borderRadius: 10, backgroundColor: '#222', borderWidth: 1, borderColor: '#333', alignItems: 'center', justifyContent: 'center' },
+  currencyPillActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  currencyPillText: { color: '#999', fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  currencyPillTextActive: { color: '#07120F' },
   input: {
     backgroundColor: '#222',
     borderRadius: 12,
@@ -723,27 +828,31 @@ const s = StyleSheet.create({
   },
 
   monthList: { marginBottom: 12 },
-  monthRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    gap: 10,
-  },
-  monthLabel: { fontSize: 13, fontWeight: '600', color: '#888', width: 36 },
-  currencyHint: { fontSize: 13, color: '#444', width: 24, textAlign: 'right', fontWeight: '500' },
-  monthInput: {
-    flex: 1,
+  monthGroup: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
+  monthGroupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  monthLabel: { fontSize: 13, fontWeight: '600', color: '#AAA' },
+  addIncomeBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 3, paddingHorizontal: 5 },
+  addIncomeText: { color: '#00C896', fontSize: 12, fontWeight: '600' },
+  incomeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },
+  incomeNameInput: {
+    flex: 1.2,
     backgroundColor: '#222',
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 10,
-    fontSize: 15,
     color: '#FFF',
-    borderWidth: 1,
-    borderColor: '#2C2C2C',
-    fontWeight: '500',
-    fontVariant: ['tabular-nums'],
+    fontSize: 14,
+  },
+  incomeAmountInput: {
+    flex: 0.8,
+    backgroundColor: '#222',
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'right',
   },
 
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },

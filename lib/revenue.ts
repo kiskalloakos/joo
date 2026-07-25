@@ -7,8 +7,17 @@ export interface RevenueEntry {
   id: string;            // UUID — stable across renames + cloud sync
   label: string;         // e.g. "2026"
   amount: number;
-  months?: number[];     // 12 entries (Jan–Dec) when monthly breakdown is used
+  months?: RevenueMonth[]; // 12 entries (Jan–Dec), each with one or more income streams
 }
+
+export interface RevenueIncome {
+  id: string;
+  name: string;
+  amount: number;
+  currency?: string;
+}
+
+export type RevenueMonth = RevenueIncome[];
 
 export interface RevenueState {
   entries: RevenueEntry[];
@@ -22,7 +31,24 @@ function defaultState(): RevenueState {
 }
 
 function normalize(state: RevenueState): RevenueState {
-  const entries = state.entries.map((e) => (e.id ? e : { ...e, id: newId() }));
+  const entries: RevenueEntry[] = state.entries.map((e) => {
+    const legacyMonths = e.months as unknown;
+    const months = Array.isArray(legacyMonths)
+      ? legacyMonths.map((month, index) => {
+          if (Array.isArray(month)) {
+            return month.map((income, incomeIndex) => ({
+              id: typeof income?.id === 'string' ? income.id : `income-${index}-${incomeIndex}`,
+              name: typeof income?.name === 'string' ? income.name : 'Income',
+              amount: Number(income?.amount) || 0,
+              currency: typeof income?.currency === 'string' ? income.currency : undefined,
+            }));
+          }
+          const amount = Number(month) || 0;
+          return amount > 0 ? [{ id: `legacy-${index}`, name: 'Income', amount }] : [];
+        })
+      : undefined;
+    return { ...e, id: e.id || newId(), months };
+  });
   if (entries.length === 0) {
     entries.push({ id: newId(), label: String(new Date().getFullYear()), amount: 0 });
   }
@@ -125,4 +151,10 @@ export function sumMonths(months: number[] | undefined): number {
 
 export function activeMonthCount(months: number[] | undefined): number {
   return months ? months.filter((m) => m > 0).length : 0;
+}
+
+export function monthTotals(months: RevenueMonth[] | undefined): number[] {
+  return Array.from({ length: 12 }, (_, index) =>
+    (months?.[index] ?? []).reduce((sum, income) => sum + income.amount, 0),
+  );
 }

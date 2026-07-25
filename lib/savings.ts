@@ -12,6 +12,7 @@ export interface SavingsData {
   /** When false, projections compound the current amount with no future
    *  monthly contributions (lump-sum case). Default true. */
   contributeMonthly: boolean;
+  currency?: string;
 }
 
 const NS = 'savings';
@@ -39,7 +40,7 @@ export async function refreshSavings(): Promise<SavingsData> {
   const { data, error } = await supabase
     .from('savings_setup')
     .select(
-      'total_invested, start_month, start_year, annual_return, show_projections, contribute_monthly',
+      'total_invested, start_month, start_year, annual_return, show_projections, contribute_monthly, currency',
     )
     .eq('user_id', uid)
     .maybeSingle();
@@ -51,6 +52,7 @@ export async function refreshSavings(): Promise<SavingsData> {
     annualReturn: String(data.annual_return),
     showProjections: data.show_projections ?? false,
     contributeMonthly: data.contribute_monthly ?? true,
+    currency: data.currency ?? undefined,
   };
   await save(NS, result);
   return result;
@@ -72,6 +74,7 @@ export async function saveSavings(d: SavingsData): Promise<void> {
           annual_return: parseAmount(d.annualReturn) || 5,
           show_projections: d.showProjections,
           contribute_monthly: d.contributeMonthly,
+          currency: d.currency ?? null,
         },
         { onConflict: 'user_id' },
       ),

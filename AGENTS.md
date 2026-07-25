@@ -26,23 +26,21 @@ no custom backend.
 - `app/_layout.tsx` — root. Auth/onboarding/recovery phase machine, Supabase
   session + password-recovery deep links, `SafeAreaProvider`,
   `GestureHandlerRootView`, and a forced dark navigation theme.
-- `app/(tabs)/_layout.tsx` — **material-top-tabs pager** (react-native-pager-view)
-  via `withLayoutContext`. **Native:** a fixed center pill with a label
-  strip translating under it, driven by the pager's live `position`
-  (finger-tracked). **Web:** a left-aligned scrollable pill bar (the
-  `WEB` branch in `_layout.tsx`). `withLayoutContext`'s 3rd arg is `true`
-  so declared `<Screen>` children are the definitive route set; optional
-  tabs are `setup.showX`-filtered. The navigator is `key`-ed on the
-  visible set so a visibility toggle does a clean remount (avoids
-  react-native-tab-view pager-vs-state desync).
-- `app/(tabs)/*.tsx` — 8 screens. **Core (always shown):** `index`
-  (Dashboard) and `recurrings` (Recurrings — sole owner of monthly-cost
-  management: add/edit/delete, mark-paid + account picker), then
-  `settings`. **Optional (`setup.showX`):** `investments`, `savings`,
-  `revenue`, `debts`, `net-worth`. Dashboard shows a read-only costs
-  summary that taps through to Recurrings.
+- `app/(tabs)/_layout.tsx` — iOS-native `NativeTabs` bottom navigation.
+  Its triggers are a fixed, static route list: Dashboard (which includes
+  Recurrings), Wealth (Investments + Savings), Debts, and Revenue. Projects
+  is permanently available through iOS's native More tab. Settings lives
+  outside the tab navigator and is opened from the native top-right gear
+  button.
+- `app/(tabs)/*.tsx` — 7 permanent app screens: `index` (Dashboard, followed
+  by the full Recurrings experience), `recurrings` (the embedded monthly-cost
+  manager: add/edit/delete, mark-paid + account picker), `investments`,
+  `savings`, `revenue`, `debts`, and `projects`. Investments renders Savings
+  immediately beneath it as the combined Wealth screen; Recurrings and Savings
+  have no standalone tab triggers. `app/settings.tsx` is a stack screen, not
+  a tab.
 - `app/+html.tsx` — web HTML shell incl. CSP.
-- `app.json` — Expo config (`scheme: famescale`, `newArchEnabled: true`).
+- `app.json` — Expo config (`scheme: famescale`, React Compiler enabled).
 
 **Data layer** (`lib/`): each domain (dashboard, investments, savings, debts,
 revenue, currency, setup, transactions) exposes the same shape:
@@ -54,7 +52,7 @@ revenue, currency, setup, transactions) exposes the same shape:
 - `saveX()` — local + Supabase upsert (via `sync.ts` `reportable()` →
   `SyncIndicator`).
 - `finance.ts` — pure, dependency-free money/logic (`fv`,
-  `monthsSinceStart`, `computeNetWorth`, `resetStaleCosts`, `monthDiff`,
+  `monthsSinceStart`, `resetStaleCosts`, `monthDiff`,
   `nextOccurrence`, `annualizedPeriodicTotal`); unit-tested
   (`finance.test.ts`, 52 cases). `userId()` lives in `supabase.ts`;
   `CURRENCIES` in `currencies.ts` — both deduped, don't re-inline.
@@ -72,20 +70,15 @@ revenue, currency, setup, transactions) exposes the same shape:
   stays paid until `monthDiff(paidMonth, now) >= intervalMonths`, so
   monthly clears next month (legacy behavior — `intervalMonths` defaults 1
   via `?? 1`, so old rows are unaffected), quarterly after 3, yearly 12.
-  (`setup.showRecurrings` gates the Recurrings tab — default true; the
-  `MIGRATION_show_recurrings.sql` heal flips the legacy dead-flag `false`
-  to `true` so existing users keep it. When off, the Dashboard's Monthly
-  Costs summary card is hidden too, since it taps through to that tab;
-  hero math is unchanged — costs still exist in data.)
 - `supabase.ts` — client; anon key from `EXPO_PUBLIC_*` env. **RLS is the only
   access control.** All 8 tables use `FOR ALL ... USING/WITH CHECK
   (auth.uid() = user_id)`. Audit SQL at repo root: `SECURITY_VERIFY.sql`
   (read-only check), `SECURITY_TODO.sql`, `MIGRATION_*.sql`. Run
   `SECURITY_VERIFY.sql` in the Supabase SQL editor whenever a table is added.
 
-**Stack:** Expo ~54, React 19, React Native 0.81, TypeScript strict, New
-Architecture. expo-router 6, @react-navigation/material-top-tabs 7 +
-react-native-pager-view, Supabase, gesture-handler/reanimated,
+**Stack:** Expo ~56, React 19.2, React Native 0.85, TypeScript strict, New
+Architecture. expo-router 56 (including iOS-native tabs), Supabase,
+gesture-handler/reanimated,
 draggable-flatlist, safe-area-context.
 
 ## Conventions & gotchas
@@ -99,14 +92,10 @@ These are non-obvious and have bitten before — respect them:
 - **The dark navigation theme in `app/_layout.tsx` is load-bearing.**
   react-native-screens paints the native screen background from
   `theme.colors.background`; without it, tab transitions flash white.
-- **Tab swipe is native (pager), not a JS gesture.** The navigator is
-  `key`-ed on the visible-tab set: toggling a tab in Settings remounts it
-  (screens re-seed from `peekX()` instantly; scroll resets — acceptable for a
-  rare action). Don't try to "fix" the toggle with post-hoc `navigate()` —
-  react-native-tab-view desyncs the pager view from nav state on runtime
-  route-list changes; the remount is the working fix. `animationEnabled:false`
-  keeps taps instant; swipe still animates regardless.
-- **`@expo/cli` must match the Expo SDK major** (54.x — *not* 55). A mismatch
+- **The bottom navigation is native and fixed.** Do not add page hiding,
+  reordering, or runtime-generated `NativeTabs.Trigger` entries; NativeTabs
+  requires its route list to be static.
+- **`@expo/cli` must match the Expo SDK major** (56.x). A mismatch
   ships a Metro whose HMR URL format Expo Go rejects, crashing the dev server.
 - **UUIDs come from `newId()`** (`lib/dashboard.ts`, expo-crypto). Never
   `Math.random()`.

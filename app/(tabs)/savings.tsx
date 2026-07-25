@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   TouchableOpacity,
   TextInput,
@@ -10,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { AppText as Text } from '../../components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,7 +36,7 @@ function fmtFull(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function Savings() {
+export default function Savings({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<SavingsData>(peekSavings);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('savings'));
@@ -49,6 +49,7 @@ export default function Savings() {
   const [formReturn, setFormReturn] = useState('');
   const [formShowProjections, setFormShowProjections] = useState(false);
   const [formContributeMonthly, setFormContributeMonthly] = useState(true);
+  const [formCurrency, setFormCurrency] = useState(() => peekCurrencyForPage('savings'));
 
   useFocusEffect(
     useCallback(() => {
@@ -71,7 +72,8 @@ export default function Savings() {
     }, []),
   );
 
-  const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
+  const itemCurrency = data.currency ?? currency;
+  const symbol = CURRENCIES.find((c) => c.code === itemCurrency)?.symbol ?? itemCurrency + ' ';
   const pv = parseAmount(data.totalInvested) || 0;
   const sy = parseInt(data.startYear) || new Date().getFullYear();
   const sm = parseInt(data.startMonth) || 1;
@@ -100,6 +102,7 @@ export default function Savings() {
     setFormReturn(data.annualReturn);
     setFormShowProjections(data.showProjections);
     setFormContributeMonthly(data.contributeMonthly);
+    setFormCurrency(data.currency ?? currency);
     feedback.tap();
     setEditVisible(true);
   };
@@ -112,6 +115,7 @@ export default function Savings() {
       annualReturn: formReturn || '5',
       showProjections: formShowProjections,
       contributeMonthly: formContributeMonthly,
+      currency: formCurrency,
     };
     setData(next);
     feedback.success();
@@ -120,9 +124,13 @@ export default function Savings() {
   };
 
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom }]}>
+    <View style={[s.container, embedded ? s.embeddedContainer : { paddingBottom: insets.bottom }]}>
 
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[s.scroll, embedded && s.embeddedScroll]}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!embedded}
+      >
         <TouchableOpacity style={s.heroCard} onPress={openEdit} activeOpacity={0.85}>
           <Text style={s.heroLabel}>TOTAL SAVED</Text>
           <Text style={s.heroAmount}>{fmt(pv, symbol)}</Text>
@@ -238,6 +246,14 @@ export default function Savings() {
                   keyboardType="decimal-pad"
                   autoFocus
                 />
+                <Text style={s.label}>CURRENCY</Text>
+                <View style={s.currencyGrid}>
+                  {CURRENCIES.map((item) => (
+                    <TouchableOpacity key={item.code} style={[s.currencyPill, formCurrency === item.code && s.currencyPillActive]} onPress={() => setFormCurrency(item.code)}>
+                      <Text style={[s.currencyPillText, formCurrency === item.code && s.currencyPillTextActive]}>{item.symbol} {item.code}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
                 <TouchableOpacity
                   style={s.toggleRow}
@@ -346,9 +362,11 @@ export default function Savings() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
+  embeddedContainer: { flex: undefined },
   header: { paddingHorizontal: 20, paddingVertical: 14 },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
   scroll: { paddingHorizontal: 16 },
+  embeddedScroll: { paddingHorizontal: 0 },
 
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
   heroLabel: {
@@ -464,6 +482,11 @@ const s = StyleSheet.create({
     borderColor: '#2A2A2A',
     fontWeight: '500',
   },
+  currencyGrid: { flexDirection: 'row', gap: 4, marginBottom: 18 },
+  currencyPill: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, paddingHorizontal: 3, borderRadius: 10, backgroundColor: '#222', borderWidth: 1, borderColor: '#2A2A2A' },
+  currencyPillActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  currencyPillText: { color: '#999', fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  currencyPillTextActive: { color: '#07120F' },
   hint: { fontSize: 11, color: '#444', marginTop: -10, marginBottom: 18, fontWeight: '500' },
 
   toggleRow: {

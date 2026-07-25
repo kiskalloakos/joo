@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { LogBox, View, Platform } from 'react-native';
+import { View, Platform, Text, TextInput } from 'react-native';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
-import { ThemeProvider, DarkTheme } from '@react-navigation/native';
+import { ThemeProvider, DarkTheme } from 'expo-router/react-navigation';
 
 // react-native-screens paints the native screen container with
 // theme.colors.background. Default light theme = white flashes during tab
@@ -11,11 +12,6 @@ const AppDarkTheme = {
   colors: { ...DarkTheme.colors, background: '#0D0D0D', card: '#0D0D0D' },
 };
 
-// react-native-draggable-flatlist@4.0.3 calls measureLayout against a ref the
-// New Architecture (newArchEnabled) no longer treats as a native node. Drag
-// still works; the warning is cosmetic. Silence just this one string so real
-// warnings stay visible. Revisit if the drag library is upgraded.
-LogBox.ignoreLogs(['ref.measureLayout must be called with a ref to a native component']);
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -29,14 +25,18 @@ import SyncIndicator from '../components/SyncIndicator';
 import { supabase } from '../lib/supabase';
 import { setProfile } from '../lib/storage';
 import { getSetup, refreshSetup } from '../lib/setup';
-import { getDashboard } from '../lib/dashboard';
-import { getInvestments } from '../lib/investments';
-import { getSavings } from '../lib/savings';
-import { getDebts } from '../lib/debts';
-import { getRevenue } from '../lib/revenue';
-import { getCurrencySettings } from '../lib/currency';
+import { getDashboard, refreshDashboard } from '../lib/dashboard';
+import { getInvestments, refreshInvestments } from '../lib/investments';
+import { getSavings, refreshSavings } from '../lib/savings';
+import { getDebts, refreshDebts } from '../lib/debts';
+import { getRevenue, refreshRevenue } from '../lib/revenue';
+import { getCurrencySettings, refreshCurrencySettings } from '../lib/currency';
 import { getRates, refreshRatesInBackground } from '../lib/exchangeRates';
 import { resolveAccess } from '../lib/access';
+import { getProjects, refreshProjects } from '../lib/projects';
+import { getTransactions, refreshTransactions } from '../lib/transactions';
+import { getWealthVisibility } from '../lib/wealth';
+import { setCachedUserEmail } from '../lib/userProfile';
 
 type Phase = 'loading' | 'signed-out' | 'recovery' | 'onboarding' | 'paywall' | 'ready';
 
@@ -66,15 +66,29 @@ function extractRecovery(url: string): { access: string; refresh: string } | nul
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Geist: require('../assets/fonts/Geist_500Medium.ttf'),
+    'Geist-SemiBold': require('../assets/fonts/Geist_600SemiBold.ttf'),
+    'Geist-Bold': require('../assets/fonts/Geist_700Bold.ttf'),
+  });
   const [phase, setPhase] = useState<Phase>('loading');
+
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    // Default every JS text/input surface to the new Geist family. Individual
+    // screens can still opt into the semibold/bold faces where needed.
+    (Text as any).defaultProps = { ...(Text as any).defaultProps, style: [{ fontFamily: 'Geist' }, (Text as any).defaultProps?.style] };
+    (TextInput as any).defaultProps = { ...(TextInput as any).defaultProps, style: [{ fontFamily: 'Geist' }, (TextInput as any).defaultProps?.style] };
+  }, [fontsLoaded]);
 
   useEffect(() => {
     let cancelled = false;
     let inRecovery = false;
 
-    const apply = async (userId: string | null) => {
+    const apply = async (userId: string | null, email?: string | null) => {
       if (!userId) {
         setProfile('anonymous');
+        setCachedUserEmail(null);
         if (!cancelled) {
           inRecovery = false;
           setPhase('signed-out');
@@ -82,6 +96,7 @@ export default function RootLayout() {
         return;
       }
       setProfile(userId);
+      setCachedUserEmail(email);
       if (inRecovery) {
         if (!cancelled) setPhase('recovery');
         return;
@@ -100,6 +115,9 @@ export default function RootLayout() {
         getDebts(),
         getRevenue(),
         getCurrencySettings(),
+        getProjects(),
+        getTransactions(),
+        getWealthVisibility(),
         // Prime FX rates from local cache so peekRates() returns real values
         // on the dashboard's first paint. The fresh network fetch happens
         // out-of-band (refreshRatesInBackground) and updates subscribers when
@@ -108,6 +126,20 @@ export default function RootLayout() {
       ]);
       if (cancelled) return;
       refreshRatesInBackground();
+      // Refresh everything while the first screen is already usable. Native
+      // tabs mount lazily, so this puts their current data in the cache before
+      // the user first opens them instead of making each tab fetch on arrival.
+      void Promise.all([
+        refreshDashboard(),
+        refreshInvestments(),
+        refreshSavings(),
+        refreshDebts(),
+        refreshRevenue(),
+        refreshProjects(),
+        refreshTransactions(),
+        refreshCurrencySettings(),
+        refreshSetup(),
+      ]);
       if (!setup?.completed) {
         setPhase('onboarding');
         return;
@@ -159,7 +191,7 @@ export default function RootLayout() {
       // locally-cached data (the app is offline-capable via peekX caches).
       // Audit 2026-05: reviewed, accepted as defense-in-depth, not a bypass.
       const { data: { session } } = await supabase.auth.getSession();
-      apply(session?.user?.id ?? null);
+      apply(session?.user?.id ?? null, session?.user?.email ?? null);
     };
 
     bootstrap();
@@ -182,7 +214,7 @@ export default function RootLayout() {
       // A successful password update fires USER_UPDATED; treat it as exit
       // from recovery so the user lands in the app normally.
       if (event === 'USER_UPDATED') inRecovery = false;
-      apply(session?.user?.id ?? null);
+      apply(session?.user?.id ?? null, session?.user?.email ?? null);
     });
 
     return () => {
@@ -192,7 +224,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (phase === 'loading') {
+  if (!fontsLoaded || phase === 'loading') {
     return <View style={{ flex: 1, backgroundColor: '#0D0D0D' }} />;
   }
 
@@ -236,7 +268,19 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0D' }}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider value={AppDarkTheme}>
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0D0D0D' } }} />
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0D0D0D' } }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="settings"
+              options={{
+                headerShown: true,
+                title: 'Settings',
+                headerStyle: { backgroundColor: '#0D0D0D' },
+                headerTintColor: '#00C896',
+                headerShadowVisible: false,
+              }}
+            />
+          </Stack>
         </ThemeProvider>
         <SyncIndicator />
         <ToastHost />

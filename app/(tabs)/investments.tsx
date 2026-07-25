@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   TouchableOpacity,
   TextInput,
@@ -10,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
@@ -25,6 +24,13 @@ import {
 } from '../../lib/investments';
 import { feedback } from '../../lib/feedback';
 import { fv, monthsSinceStart, parseAmount } from '../../lib/finance';
+import {
+  getWealthVisibility,
+  peekWealthVisibility,
+  saveWealthVisibility,
+  type WealthVisibility,
+} from '../../lib/wealth';
+import Savings from './savings';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -37,10 +43,11 @@ function fmtFull(value: number, symbol: string): string {
 }
 
 export default function Investments() {
-  const insets = useSafeAreaInsets();
   const [data, setData] = useState<InvestmentData>(peekInvestments);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('investments'));
   const [yearlyExpanded, setYearlyExpanded] = useState(true);
+  const [visibility, setVisibility] = useState<WealthVisibility>(peekWealthVisibility);
+  const [visibilityModal, setVisibilityModal] = useState(false);
 
   // Tap-to-edit modal for the whole portfolio (total + start date + rate)
   const [editVisible, setEditVisible] = useState(false);
@@ -50,6 +57,7 @@ export default function Investments() {
   const [formReturn, setFormReturn] = useState('');
   const [formShowProjections, setFormShowProjections] = useState(false);
   const [formContributeMonthly, setFormContributeMonthly] = useState(true);
+  const [formCurrency, setFormCurrency] = useState(() => peekCurrencyForPage('investments'));
 
   useFocusEffect(
     useCallback(() => {
@@ -66,13 +74,17 @@ export default function Investments() {
       refreshCurrencyForPage('investments').then((c) => {
         if (!cancelled) setCurrency(c);
       });
+      getWealthVisibility().then((value) => {
+        if (!cancelled) setVisibility(value);
+      });
       return () => {
         cancelled = true;
       };
     }, []),
   );
 
-  const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
+  const itemCurrency = data.currency ?? currency;
+  const symbol = CURRENCIES.find((c) => c.code === itemCurrency)?.symbol ?? itemCurrency + ' ';
   const pv = parseAmount(data.totalInvested) || 0;
   const sy = parseInt(data.startYear) || new Date().getFullYear();
   const sm = parseInt(data.startMonth) || 1;
@@ -101,6 +113,7 @@ export default function Investments() {
     setFormReturn(data.annualReturn);
     setFormShowProjections(data.showProjections);
     setFormContributeMonthly(data.contributeMonthly);
+    setFormCurrency(data.currency ?? currency);
     feedback.tap();
     setEditVisible(true);
   };
@@ -113,6 +126,7 @@ export default function Investments() {
       annualReturn: formReturn || '7',
       showProjections: formShowProjections,
       contributeMonthly: formContributeMonthly,
+      currency: formCurrency,
     };
     setData(next);
     feedback.success();
@@ -120,10 +134,25 @@ export default function Investments() {
     setEditVisible(false);
   };
 
+  const toggleSection = async (section: keyof WealthVisibility) => {
+    const next = { ...visibility, [section]: !visibility[section] };
+    setVisibility(next);
+    await saveWealthVisibility(next);
+  };
+
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom }]}>
+    <View style={s.container} collapsable={false}>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <View style={s.wealthControlRow}>
+          <Text style={s.wealthControlLabel}>WEALTH</Text>
+          <TouchableOpacity style={s.customizeButton} onPress={() => setVisibilityModal(true)}>
+            <Ionicons name="options-outline" size={15} color="#00C896" />
+            <Text style={s.customizeButtonText}>Customize</Text>
+          </TouchableOpacity>
+        </View>
+
+        {visibility.showInvestments && <>
         {/* Hero — big green total, tap to edit */}
         <TouchableOpacity style={s.heroCard} onPress={openEdit} activeOpacity={0.85}>
           <Text style={s.heroLabel}>TOTAL INVESTED</Text>
@@ -215,6 +244,20 @@ export default function Investments() {
             )}
           </View>
         )}
+        </>}
+
+        {visibility.showSavings && <>
+          <Savings embedded />
+        </>}
+
+        {!visibility.showInvestments && !visibility.showSavings && (
+          <View style={s.emptyWealth}>
+            <Text style={s.emptyWealthText}>No Wealth sections are shown.</Text>
+            <TouchableOpacity onPress={() => setVisibilityModal(true)}>
+              <Text style={s.emptyWealthAction}>Customize Wealth</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -243,6 +286,14 @@ export default function Investments() {
                   keyboardType="decimal-pad"
                   autoFocus
                 />
+                <Text style={s.label}>CURRENCY</Text>
+                <View style={s.currencyGrid}>
+                  {CURRENCIES.map((item) => (
+                    <TouchableOpacity key={item.code} style={[s.currencyPill, formCurrency === item.code && s.currencyPillActive]} onPress={() => setFormCurrency(item.code)}>
+                      <Text style={[s.currencyPillText, formCurrency === item.code && s.currencyPillTextActive]}>{item.symbol} {item.code}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
                 <TouchableOpacity
                   style={s.toggleRow}
@@ -345,6 +396,36 @@ export default function Investments() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={visibilityModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>Customize Wealth</Text>
+            <Text style={s.sheetHint}>Choose which sections appear on this tab.</Text>
+            <TouchableOpacity style={s.visibilityRow} onPress={() => toggleSection('showInvestments')}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.toggleTitle}>Investments</Text>
+                <Text style={s.toggleHint}>Portfolio total and projections</Text>
+              </View>
+              <View style={[s.switch, visibility.showInvestments && s.switchOn]}>
+                <View style={[s.switchKnob, visibility.showInvestments && s.switchKnobOn]} />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.visibilityRow} onPress={() => toggleSection('showSavings')}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.toggleTitle}>Savings</Text>
+                <Text style={s.toggleHint}>Savings total and projections</Text>
+              </View>
+              <View style={[s.switch, visibility.showSavings && s.switchOn]}>
+                <View style={[s.switchKnob, visibility.showSavings && s.switchKnobOn]} />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.closeBtn} onPress={() => setVisibilityModal(false)}>
+              <Text style={s.closeBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -353,7 +434,16 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   header: { paddingHorizontal: 20, paddingVertical: 14 },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
-  scroll: { paddingHorizontal: 16 },
+  scroll: { paddingHorizontal: 16, paddingTop: 112 },
+  wealthControlRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
+  wealthControlLabel: { fontSize: 11, fontWeight: '700', color: '#666', letterSpacing: 1.5 },
+  customizeButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 9, borderRadius: 12, backgroundColor: '#0D1F1A', borderWidth: 1, borderColor: '#1F3A30' },
+  customizeButtonText: { fontSize: 12, color: '#00C896', fontWeight: '600' },
+  sectionDivider: { marginTop: 16, marginBottom: 12, paddingHorizontal: 4 },
+  sectionTitle: { fontSize: 11, fontWeight: '700', color: '#666', letterSpacing: 1.5 },
+  emptyWealth: { ...surface, borderRadius: 16, padding: 24, alignItems: 'center', gap: 10 },
+  emptyWealthText: { color: '#777', fontSize: 14, fontWeight: '500' },
+  emptyWealthAction: { color: '#00C896', fontSize: 14, fontWeight: '600' },
 
   // Hero (mirrors Dashboard pattern: big green amount, sub-info, divider)
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
@@ -470,6 +560,9 @@ const s = StyleSheet.create({
     maxHeight: '85%',
   },
   sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', marginBottom: 20, letterSpacing: -0.3 },
+  sheetHint: { fontSize: 13, color: '#777', lineHeight: 19, marginTop: -10, marginBottom: 12 },
+  closeBtn: { marginTop: 16, paddingVertical: 14, borderRadius: 12, backgroundColor: '#00C896', alignItems: 'center' },
+  closeBtnText: { fontSize: 15, color: '#07120F', fontWeight: '700' },
 
   label: {
     fontSize: 10,
@@ -490,6 +583,11 @@ const s = StyleSheet.create({
     borderColor: '#2A2A2A',
     fontWeight: '500',
   },
+  currencyGrid: { flexDirection: 'row', gap: 4, marginBottom: 18 },
+  currencyPill: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, paddingHorizontal: 3, borderRadius: 10, backgroundColor: '#222', borderWidth: 1, borderColor: '#2A2A2A' },
+  currencyPillActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  currencyPillText: { color: '#999', fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  currencyPillTextActive: { color: '#07120F' },
   hint: { fontSize: 11, color: '#444', marginTop: -10, marginBottom: 18, fontWeight: '500' },
 
   toggleRow: {
@@ -500,6 +598,13 @@ const s = StyleSheet.create({
     marginBottom: 14,
     borderTopWidth: 1,
     borderTopColor: '#222',
+  },
+  visibilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#262626',
   },
   toggleTitle: { fontSize: 14, color: '#EEE', fontWeight: '600' },
   toggleHint: { fontSize: 11, color: '#555', marginTop: 4, lineHeight: 14, fontWeight: '500' },

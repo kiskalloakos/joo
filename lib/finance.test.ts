@@ -2,9 +2,7 @@ import { describe, it, expect } from '@jest/globals';
 import {
   fv,
   monthsSinceStart,
-  computeNetWorth,
   resetStaleCosts,
-  goalMonthlyPace,
   monthDiff,
   nextOccurrence,
   annualizedPeriodicTotal,
@@ -75,76 +73,6 @@ describe('monthsSinceStart — elapsed months, clamped to >= 1', () => {
     // step back one calendar month, handling the January wrap
     const d = new Date(y, now.getMonth() - 1, 1);
     expect(monthsSinceStart(d.getFullYear(), d.getMonth() + 1)).toBe(2);
-  });
-});
-
-describe('computeNetWorth — roll-up with load-bearing boolean defaults', () => {
-  it('null setup: cash + investments − debts, savings excluded by default', () => {
-    const r = computeNetWorth(1000, 500, 999, 200, null);
-    expect(r.investmentsEnabled).toBe(true);
-    expect(r.savingsEnabled).toBe(false); // showSavings defaults OFF
-    expect(r.debtsEnabled).toBe(true);
-    expect(r.debtsCountInTotal).toBe(true);
-    expect(r.investedTotal).toBe(500); // saved (999) NOT counted
-    expect(r.netWorth).toBe(1000 + 500 - 200);
-  });
-
-  it('savings counted only when showSavings === true', () => {
-    expect(computeNetWorth(0, 0, 300, 0, { showSavings: true }).investedTotal).toBe(300);
-    expect(computeNetWorth(0, 0, 300, 0, { showSavings: false }).investedTotal).toBe(0);
-    expect(computeNetWorth(0, 0, 300, 0, {}).investedTotal).toBe(0); // undefined => off
-  });
-
-  it('investments excluded only when showInvestments === false', () => {
-    expect(computeNetWorth(0, 400, 0, 0, { showInvestments: false }).investedTotal).toBe(0);
-    expect(computeNetWorth(0, 400, 0, 0, { showInvestments: undefined }).investedTotal).toBe(400);
-  });
-
-  it('debts dropped from total when the tab is off', () => {
-    const r = computeNetWorth(1000, 0, 0, 250, { showDebts: false });
-    expect(r.debtsEnabled).toBe(false);
-    expect(r.debtsCountInTotal).toBe(false);
-    expect(r.netWorth).toBe(1000); // debts not subtracted
-  });
-
-  it('debts shown but excluded from total via includeDebtsInNetWorth=false', () => {
-    const r = computeNetWorth(1000, 0, 0, 250, { includeDebtsInNetWorth: false });
-    expect(r.debtsEnabled).toBe(true); // still rendered
-    expect(r.debtsCountInTotal).toBe(false); // but not subtracted
-    expect(r.netWorth).toBe(1000);
-  });
-
-  it('everything on: cash + investments + savings − debts', () => {
-    const r = computeNetWorth(1000, 500, 300, 200, {
-      showInvestments: true,
-      showSavings: true,
-      showDebts: true,
-      includeDebtsInNetWorth: true,
-    });
-    expect(r.netWorth).toBe(1000 + 500 + 300 - 200);
-  });
-
-  it('net worth can go negative', () => {
-    expect(computeNetWorth(100, 0, 0, 900, null).netWorth).toBe(-800);
-  });
-
-  it('assets default to 0 — omitting the arg is unchanged', () => {
-    expect(computeNetWorth(1000, 500, 0, 200, null).netWorth).toBe(1300);
-  });
-
-  it('assets always add to net worth (no gating)', () => {
-    expect(computeNetWorth(1000, 0, 0, 0, null, 50000).netWorth).toBe(51000);
-    // counted even when other tabs are off
-    expect(
-      computeNetWorth(0, 0, 0, 0, { showInvestments: false, showDebts: false }, 250000)
-        .netWorth,
-    ).toBe(250000);
-  });
-
-  it('assets combine with the rest: cash + invested + assets − debts', () => {
-    expect(computeNetWorth(1000, 500, 0, 200, null, 30000).netWorth).toBe(
-      1000 + 500 + 30000 - 200,
-    );
   });
 });
 
@@ -291,22 +219,6 @@ describe('annualizedPeriodicTotal — yearly cost of non-monthly bills', () => {
   it('empty list is 0', () => expect(annualizedPeriodicTotal([])).toBe(0));
 });
 
-describe('goalMonthlyPace — set-aside per month to hit a target', () => {
-  it('splits the remaining amount across the months left', () => {
-    expect(goalMonthlyPace(1200, 0, 12)).toBe(100);
-    expect(goalMonthlyPace(1000, 400, 6)).toBe(100);
-  });
-
-  it('returns 0 once the goal is met or exceeded', () => {
-    expect(goalMonthlyPace(1000, 1000, 5)).toBe(0);
-    expect(goalMonthlyPace(1000, 1500, 5)).toBe(0);
-  });
-
-  it('clamps months to >= 1 (no divide-by-zero on a same-month deadline)', () => {
-    expect(goalMonthlyPace(800, 0, 0)).toBe(800);
-    expect(goalMonthlyPace(800, 0, -3)).toBe(800);
-  });
-});
 
 describe('parseAmount — locale-tolerant money string parsing', () => {
   it('parses a plain dot decimal', () => expect(parseAmount('150.66')).toBe(150.66));

@@ -3,7 +3,7 @@
 -- from Settings → Delete Account.
 --
 -- Why an RPC: the client uses the anon key and can never touch auth.users
--- directly. Only 3 of the 10 user-scoped tables (assets, goals, transactions)
+-- directly. Two retired legacy tables plus transactions
 -- FK to auth.users with ON DELETE CASCADE — the rest (accounts, costs,
 -- debts, investment_setup, revenue_entries, savings_setup, user_settings)
 -- would orphan rows if we relied on a cascade. So the function explicitly

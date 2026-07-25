@@ -1,8 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
-  Text,
   ScrollView,
+  Pressable,
   TouchableOpacity,
   Modal,
   TextInput,
@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,10 +23,7 @@ import { showToast } from '../../lib/toast';
 import { glowAmber, glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { parseAmount } from '../../lib/finance';
-import { useDragReorder } from '../../lib/useDragReorder';
-import DraggableRow from '../../components/DraggableRow';
-import SortableScroll from '../../components/SortableScroll';
-import { NestableDraggableFlatList, RenderItemParams } from 'react-native-draggable-flatlist';
+import { convert, peekRates, subscribeRates, type Rates } from '../../lib/exchangeRates';
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -37,9 +34,9 @@ function parseAmt(s: string): number {
 }
 
 export default function Debts() {
-  const insets = useSafeAreaInsets();
   const [debts, setDebts] = useState<Debt[]>(peekDebts);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('debts'));
+  const [rates, setRates] = useState<Rates>(peekRates);
 
   const [modal, setModal] = useState<{ visible: boolean; editing: Debt | null }>({
     visible: false,
@@ -49,6 +46,8 @@ export default function Debts() {
   const [formAmount, setFormAmount] = useState('');
   const [formPaid, setFormPaid] = useState('');
   const [formNotes, setFormNotes] = useState('');
+  const [formCurrency, setFormCurrency] = useState(() => peekCurrencyForPage('debts'));
+  const [clearedExpanded, setClearedExpanded] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,14 +70,16 @@ export default function Debts() {
     }, []),
   );
 
+  useEffect(() => subscribeRates(setRates), []);
+
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
   // What you still owe drives the hero; the original total is informational.
   const stillOwed = debts.reduce(
-    (s, d) => s + Math.max(0, parseAmt(d.amount) - parseAmt(d.paidAmount)),
+    (s, d) => s + convert(Math.max(0, parseAmt(d.amount) - parseAmt(d.paidAmount)), d.currency ?? currency, currency, rates.rates),
     0,
   );
   const paidOff = debts.reduce(
-    (s, d) => s + Math.min(parseAmt(d.amount), parseAmt(d.paidAmount)),
+    (s, d) => s + convert(Math.min(parseAmt(d.amount), parseAmt(d.paidAmount)), d.currency ?? currency, currency, rates.rates),
     0,
   );
 
@@ -87,6 +88,7 @@ export default function Debts() {
     setFormAmount('');
     setFormPaid('');
     setFormNotes('');
+    setFormCurrency(peekCurrencyForPage('debts'));
     feedback.tap();
     setModal({ visible: true, editing: null });
   };
@@ -96,6 +98,7 @@ export default function Debts() {
     setFormAmount(debt.amount);
     setFormPaid(debt.paidAmount === '0' ? '' : debt.paidAmount);
     setFormNotes(debt.notes ?? '');
+    setFormCurrency(debt.currency ?? currency);
     feedback.tap();
     setModal({ visible: true, editing: debt });
   };
@@ -111,6 +114,7 @@ export default function Debts() {
           amount: formAmount,
           paidAmount: paid,
           notes: formNotes.trim() || null,
+          currency: formCurrency,
         }
       : {
           id: newId(),
@@ -118,6 +122,7 @@ export default function Debts() {
           amount: formAmount,
           paidAmount: paid,
           notes: formNotes.trim() || null,
+          currency: formCurrency,
           position: debts.length,
         };
     setDebts(editing ? debts.map((d) => (d.id === editing.id ? debt : d)) : [...debts, debt]);
@@ -126,19 +131,8 @@ export default function Debts() {
     await saveDebt(debt);
   };
 
-  const reorderDebts = useCallback(async (next: Debt[]) => {
-    const repositioned = next.map((d, i) => ({ ...d, position: i }));
-    feedback.dragEnd();
-    setDebts((prev) => {
-      for (const d of repositioned) {
-        const orig = prev.find((p) => p.id === d.id);
-        if (orig && orig.position !== d.position) saveDebt(d);
-      }
-      return repositioned;
-    });
-  }, []);
-
-  const debtDrag = useDragReorder(debts, reorderDebts);
+  const outstandingDebts = debts.filter((d) => parseAmt(d.amount) <= 0 || parseAmt(d.paidAmount) < parseAmt(d.amount));
+  const clearedDebts = debts.filter((d) => parseAmt(d.amount) > 0 && parseAmt(d.paidAmount) >= parseAmt(d.amount));
 
   // Shared inner content for a debt row (used by both the native draggable
   // list and the web map). The amber→green bar spans the full track and is
@@ -168,8 +162,8 @@ export default function Debts() {
                 </View>
               </View>
               <Text style={s.progressText}>
-                {fmt(paid, symbol)}{' '}
-                <Text style={s.progressMuted}>of {fmt(amt, symbol)}</Text>
+                {fmt(paid, CURRENCIES.find((c) => c.code === (debt.currency ?? currency))?.symbol ?? symbol)}{' '}
+                <Text style={s.progressMuted}>of {fmt(amt, CURRENCIES.find((c) => c.code === (debt.currency ?? currency))?.symbol ?? symbol)}</Text>
               </Text>
             </>
           )}
@@ -179,7 +173,7 @@ export default function Debts() {
             <Text style={[s.clearedTag, glowGreen]}>CLEARED</Text>
           ) : (
             <>
-              <Text style={s.rowValue}>{fmt(remaining, symbol)}</Text>
+              <Text style={s.rowValue}>{fmt(remaining, CURRENCIES.find((c) => c.code === (debt.currency ?? currency))?.symbol ?? symbol)}</Text>
               {amt > 0 && <Text style={s.rowPct}>{Math.round(pct * 100)}%</Text>}
             </>
           )}
@@ -187,25 +181,6 @@ export default function Debts() {
       </>
     );
   };
-
-  // No visible edit affordance: tap the row to edit, long-press to drag.
-  // Mirrors the Dashboard's Cash Accounts pattern — pencil icon removed.
-  const renderDebtItem = useCallback(
-    ({ item: debt, drag, isActive }: RenderItemParams<Debt>) => (
-      <View style={[s.row, isActive && s.rowDragging]}>
-        <TouchableOpacity
-          style={s.rowBody}
-          onPress={() => openEdit(debt)}
-          onLongPress={debts.length > 1 ? drag : undefined}
-          delayLongPress={150}
-          activeOpacity={0.6}
-        >
-          {rowContent(debt)}
-        </TouchableOpacity>
-      </View>
-    ),
-    [debts.length, symbol],
-  );
 
   const removeFromModal = async () => {
     if (!modal.editing) return;
@@ -224,18 +199,18 @@ export default function Debts() {
   };
 
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom }]}>
-      <SortableScroll contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+    <View style={s.container} collapsable={false}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero — still owed, with paid-off progress */}
         <View style={s.heroCard}>
           <Text style={s.heroLabel}>STILL OWED</Text>
           <Text style={s.heroAmount}>{fmt(stillOwed, symbol)}</Text>
-          {debts.length > 0 && (
+          {outstandingDebts.length > 0 && (
             <>
               <View style={s.heroDivider} />
               <View style={s.heroRow}>
                 <Text style={s.heroSubLabel}>
-                  Across {debts.length} {debts.length === 1 ? 'debt' : 'debts'}
+                  Across {outstandingDebts.length} {outstandingDebts.length === 1 ? 'debt' : 'debts'}
                 </Text>
                 {paidOff > 0 && (
                   <Text style={[s.heroPaid, glowGreen]}>{fmt(paidOff, symbol)} paid off</Text>
@@ -251,41 +226,18 @@ export default function Debts() {
             <Text style={s.cardTitle}>Outstanding</Text>
           </View>
 
-          {debts.length === 0 ? (
+          {outstandingDebts.length === 0 ? (
             <TouchableOpacity style={s.empty} onPress={openAdd}>
               <Ionicons name="document-text-outline" size={26} color="#333" />
               <Text style={s.emptyText}>Add your first debt</Text>
             </TouchableOpacity>
           ) : (
             <>
-              {Platform.OS === 'web' ? (
-                debts.map((debt) => {
-                  const d = debtDrag(debt.id);
-                  return (
-                    <DraggableRow
-                      key={debt.id}
-                      handlers={{ ...d, draggable: d.draggable && debts.length > 1 }}
-                      style={[s.row, d.isDragging && s.rowDragging, d.isHovered && s.rowDropTarget]}
-                    >
-                      <TouchableOpacity
-                        style={s.rowBody}
-                        onPress={() => openEdit(debt)}
-                        activeOpacity={0.6}
-                      >
-                        {rowContent(debt)}
-                      </TouchableOpacity>
-                    </DraggableRow>
-                  );
-                })
-              ) : (
-                <NestableDraggableFlatList
-                  data={debts}
-                  keyExtractor={(d) => d.id}
-                  renderItem={renderDebtItem}
-                  onDragEnd={({ data }) => reorderDebts(data)}
-                  activationDistance={5}
-                />
-              )}
+              {outstandingDebts.map((debt) => (
+                <TouchableOpacity key={debt.id} style={s.rowBody} onPress={() => openEdit(debt)} activeOpacity={0.6}>
+                  {rowContent(debt)}
+                </TouchableOpacity>
+              ))}
               <TouchableOpacity style={s.addRow} onPress={openAdd}>
                 <Ionicons name="add-circle-outline" size={16} color="#FFA94D" style={glowAmber} />
                 <Text style={s.addRowText}>Add Debt</Text>
@@ -294,8 +246,33 @@ export default function Debts() {
           )}
         </View>
 
+        {clearedDebts.length > 0 && (
+          <>
+            <Pressable
+              style={s.clearedHeader}
+              onPress={() => {
+                feedback.select();
+                setClearedExpanded((value) => !value);
+              }}
+            >
+              <Text style={s.clearedHeaderText}>Cleared debts</Text>
+              <View style={s.clearedCount}><Text style={s.clearedCountText}>{clearedDebts.length}</Text></View>
+              <Ionicons name={clearedExpanded ? 'chevron-up' : 'chevron-down'} size={16} color="#555" />
+            </Pressable>
+            {clearedExpanded && (
+              <View style={s.card}>
+                {clearedDebts.map((debt, index) => (
+                  <TouchableOpacity key={debt.id} style={[s.row, index === 0 && { borderTopWidth: 0 }]} onPress={() => openEdit(debt)}>
+                    {rowContent(debt)}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+
         <View style={{ height: 40 }} />
-      </SortableScroll>
+      </ScrollView>
 
       {/* Add / edit modal */}
       <Modal visible={modal.visible} transparent animationType="slide">
@@ -317,7 +294,9 @@ export default function Debts() {
                 placeholderTextColor="#444"
                 autoFocus
               />
-              <Text style={s.inputLabel}>Amount ({currency})</Text>
+              <Text style={s.inputLabel}>Currency</Text>
+              <View style={s.currencyGrid}>{CURRENCIES.map((c) => <TouchableOpacity key={c.code} style={[s.currencyPill, formCurrency === c.code && s.currencyPillActive]} onPress={() => setFormCurrency(c.code)}><Text style={[s.currencyPillText, formCurrency === c.code && s.currencyPillTextActive]}>{c.symbol} {c.code}</Text></TouchableOpacity>)}</View>
+              <Text style={s.inputLabel}>Amount ({formCurrency})</Text>
               <TextInput
                 style={s.input}
                 value={formAmount}
@@ -380,7 +359,7 @@ const s = StyleSheet.create({
     paddingVertical: 14,
   },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
-  scroll: { paddingHorizontal: 16 },
+  scroll: { paddingHorizontal: 16, paddingTop: 112 },
 
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
   heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5, marginBottom: 10 },
@@ -407,6 +386,15 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
+  clearedHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 6, marginTop: 4 },
+  clearedHeaderText: { fontSize: 12, fontWeight: '600', color: '#666', letterSpacing: 0.5, flex: 1 },
+  clearedCount: { minWidth: 20, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 9, backgroundColor: '#1C1C1C', alignItems: 'center' },
+  clearedCountText: { fontSize: 11, color: '#888', fontWeight: '700', fontVariant: ['tabular-nums'] },
+  currencyGrid: { flexDirection: 'row', flexWrap: 'nowrap', gap: 4, marginBottom: 16 },
+  currencyPill: { flex: 1, minWidth: 0, paddingHorizontal: 4, paddingVertical: 8, borderRadius: 10, backgroundColor: '#222', borderWidth: 1, borderColor: '#333', alignItems: 'center', justifyContent: 'center' },
+  currencyPillActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  currencyPillText: { color: '#999', fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  currencyPillTextActive: { color: '#07120F' },
 
   row: {
     flexDirection: 'row',

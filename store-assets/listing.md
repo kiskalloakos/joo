@@ -30,7 +30,7 @@ Alt: `Track money. Stay in control.` (29)
 ## Promotional text (App Store only, 170 chars, can change without re-review)
 
 ```
-A clean, fast dashboard for your monthly costs, savings, investments and net worth. One-time $9.99 unlock — no subscriptions, ever.
+A clean, fast dashboard for your monthly costs, savings, investments, and debts. One-time $9.99 unlock — no subscriptions, ever.
 ```
 (132 chars)
 
@@ -39,7 +39,7 @@ A clean, fast dashboard for your monthly costs, savings, investments and net wor
 ## Short description (Google Play only, 80 chars)
 
 ```
-A clean dashboard for monthly costs, savings, investments and net worth.
+A clean dashboard for monthly costs, savings, investments, and debts.
 ```
 (72 chars)
 
@@ -48,7 +48,7 @@ A clean dashboard for monthly costs, savings, investments and net worth.
 ## Keywords (App Store only, 100 chars total, comma-separated, no spaces after commas)
 
 ```
-budget,finance,money,expenses,recurring,subscriptions,savings,investments,debt,net worth,tracker
+budget,finance,money,expenses,recurring,subscriptions,savings,investments,debt,tracker
 ```
 (96 chars)
 
@@ -60,17 +60,16 @@ budget,finance,money,expenses,recurring,subscriptions,savings,investments,debt,n
 joo is a calm, dark-themed dashboard for the money in your life.
 
 Track what comes in, what goes out, what you're saving, what you owe, and
-what it all adds up to — without spreadsheets, charts you don't read, or a
+without spreadsheets, charts you don't read, or a
 monthly subscription nagging you forever.
 
 — WHAT YOU CAN TRACK
 • Monthly and periodic recurring costs (rent, subscriptions, quarterly bills,
   annual renewals)
-• Savings goals with progress and monthly contributions
+• Savings with monthly contributions and interest projections
 • Investments with compound growth projections
 • Debts and payoff progress
 • Revenue / income sources
-• Net worth — the single number that sums it all up
 
 — HOW IT WORKS
 • Add an account, drop in your numbers, and joo does the math.

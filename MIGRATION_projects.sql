@@ -67,7 +67,7 @@ CREATE POLICY project_costs_owner ON project_costs FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- New optional tab — off by default, like Goals/Debts (users opt in via
+-- New optional tab — off by default, like Debts (users opt in via
 -- Settings). A new column inherits user_settings' existing RLS.
 ALTER TABLE user_settings
   ADD COLUMN IF NOT EXISTS show_projects boolean NOT NULL DEFAULT false;

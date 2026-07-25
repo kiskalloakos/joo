@@ -16,5 +16,4 @@ export const CURRENCIES: Currency[] = [
   { code: 'EUR', symbol: '€', name: 'Euro' },
   { code: 'GBP', symbol: '£', name: 'British Pound' },
   { code: 'HUF', symbol: 'Ft ', name: 'Hungarian Forint' },
-  { code: 'CHF', symbol: 'Fr ', name: 'Swiss Franc' },
 ];

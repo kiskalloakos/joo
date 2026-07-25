@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
   View,
-  Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
   Image,
 } from 'react-native';
+import { AppText as Text } from './AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { saveSetup, ORDERABLE_TABS } from '../lib/setup';
+import { saveSetup } from '../lib/setup';
 import { saveGlobalCurrency } from '../lib/currency';
 import { glowGreen } from '../lib/glows';
 import {
@@ -27,14 +27,6 @@ interface Props {
   onComplete: () => void;
 }
 
-type TrackKey =
-  | 'showInvestments'
-  | 'showSavings'
-  | 'showRevenue'
-  | 'showDebts'
-  | 'showNetWorth'
-  | 'showGoals';
-
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei', name: 'Romanian Leu' },
   { code: 'USD', symbol: '$', name: 'US Dollar' },
@@ -44,61 +36,9 @@ const CURRENCIES = [
   { code: 'CHF', symbol: 'Fr', name: 'Swiss Franc' },
 ];
 
-const TRACKABLES: {
-  key: TrackKey;
-  title: string;
-  desc: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}[] = [
-  {
-    key: 'showInvestments',
-    title: 'Investments',
-    desc: 'Portfolio growth with compound returns.',
-    icon: 'trending-up-outline',
-  },
-  {
-    key: 'showSavings',
-    title: 'Savings',
-    desc: 'Savings goals and interest over time.',
-    icon: 'wallet-outline',
-  },
-  {
-    key: 'showRevenue',
-    title: 'Revenue',
-    desc: 'Yearly income with monthly breakdown.',
-    icon: 'bar-chart-outline',
-  },
-  {
-    key: 'showDebts',
-    title: 'Debts',
-    desc: 'What you owe — loans, cards, IOUs.',
-    icon: 'document-text-outline',
-  },
-  {
-    key: 'showNetWorth',
-    title: 'Net Worth',
-    desc: 'Cash + investments − debts in one number.',
-    icon: 'pulse-outline',
-  },
-  {
-    key: 'showGoals',
-    title: 'Goals',
-    desc: 'Savings & payoff targets with progress.',
-    icon: 'flag-outline',
-  },
-];
-
 export default function OnboardingFlow({ onComplete }: Props) {
   const [step, setStep] = useState(0);
   const [currency, setCurrency] = useState('RON');
-  const [tracks, setTracks] = useState<Record<TrackKey, boolean>>({
-    showInvestments: true,
-    showSavings: false,
-    showRevenue: false,
-    showDebts: false,
-    showNetWorth: false,
-    showGoals: false,
-  });
   const [pkg, setPkg] = useState<unknown | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -114,22 +54,10 @@ export default function OnboardingFlow({ onComplete }: Props) {
     };
   }, []);
 
-  const toggle = (key: TrackKey) => setTracks((t) => ({ ...t, [key]: !t[key] }));
-
   const finish = async () => {
     await saveGlobalCurrency(currency);
     await saveSetup({
       completed: true,
-      showInvestments: tracks.showInvestments,
-      showSavings: tracks.showSavings,
-      showRevenue: tracks.showRevenue,
-      showRecurrings: true,
-      showDebts: tracks.showDebts,
-      showNetWorth: tracks.showNetWorth,
-      showGoals: tracks.showGoals,
-      showProjects: false,
-      includeDebtsInNetWorth: true,
-      tabOrder: [...ORDERABLE_TABS],
       cashViewMode: 'single',
       trialStartedAt: null,
     });
@@ -198,13 +126,13 @@ export default function OnboardingFlow({ onComplete }: Props) {
           <TouchableOpacity style={s.backBtn} onPress={() => setStep(0)}>
             <Ionicons name="chevron-back" size={20} color="#555" />
           </TouchableOpacity>
-          <Text style={s.stepDot}>1 / 3</Text>
+          <Text style={s.stepDot}>1 / 2</Text>
         </View>
 
         <View style={s.content}>
           <Text style={s.question}>What's your{'\n'}main currency?</Text>
           <Text style={s.questionSub}>
-            You can override this per page later in Settings.
+            This is your default display currency; every new item can choose its own currency.
           </Text>
           <ScrollView showsVerticalScrollIndicator={false}>
             {CURRENCIES.map((c) => {
@@ -237,78 +165,14 @@ export default function OnboardingFlow({ onComplete }: Props) {
     );
   }
 
-  // ── Step 2: What do you want to track? (multi-select) ──────────────────────
-  if (step === 2) {
-    return (
+  // ── Step 2: Trial terms (disclosure + optional buy-now) ────────────────────
+  return (
     <SafeAreaView style={s.container}>
       <View style={s.topBar}>
         <TouchableOpacity style={s.backBtn} onPress={() => setStep(1)}>
           <Ionicons name="chevron-back" size={20} color="#555" />
         </TouchableOpacity>
-        <Text style={s.stepDot}>2 / 3</Text>
-      </View>
-
-      <View style={s.content}>
-        <Text style={s.question}>What do you want{'\n'}to track?</Text>
-        <Text style={s.questionSub}>
-          Dashboard is always included. Pick anything else you want — you can change this later in Settings.
-        </Text>
-
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Dashboard — locked-in, shown for clarity */}
-          <View style={[s.choiceCard, s.choiceCardLocked]}>
-            <View style={s.choiceIcon}>
-              <Ionicons name="home-outline" size={18} color="#00C896" style={glowGreen} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.choiceTitle, s.choiceTextActive]}>Dashboard</Text>
-              <Text style={s.choiceDesc}>Cash accounts and monthly costs. Always on.</Text>
-            </View>
-            <Text style={s.lockedTag}>INCLUDED</Text>
-          </View>
-
-          {TRACKABLES.map((t) => {
-            const active = tracks[t.key];
-            return (
-              <TouchableOpacity
-                key={t.key}
-                style={[s.choiceCard, active && s.choiceCardActive]}
-                onPress={() => toggle(t.key)}
-                activeOpacity={0.75}
-              >
-                <View style={s.choiceIcon}>
-                  <Ionicons name={t.icon} size={18} color={active ? '#00C896' : '#555'} style={active ? glowGreen : undefined} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.choiceTitle, active && s.choiceTextActive]}>{t.title}</Text>
-                  <Text style={s.choiceDesc}>{t.desc}</Text>
-                </View>
-                <View style={[s.checkbox, active && s.checkboxActive]}>
-                  {active && <Ionicons name="checkmark" size={14} color="#000" />}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      <View style={s.footer}>
-        <TouchableOpacity style={s.primaryBtn} onPress={() => setStep(3)}>
-          <Text style={s.primaryBtnText}>Next</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
-    );
-  }
-
-  // ── Step 3: Trial terms (disclosure + optional buy-now) ────────────────────
-  return (
-    <SafeAreaView style={s.container}>
-      <View style={s.topBar}>
-        <TouchableOpacity style={s.backBtn} onPress={() => setStep(2)}>
-          <Ionicons name="chevron-back" size={20} color="#555" />
-        </TouchableOpacity>
-        <Text style={s.stepDot}>3 / 3</Text>
+        <Text style={s.stepDot}>2 / 2</Text>
       </View>
 
       <View style={s.content}>

@@ -1,5 +1,6 @@
 import { supabase, userId } from './supabase';
 import { reportable } from './sync';
+import { load, peek, save } from './storage';
 
 export type TxDirection = 'in' | 'out';
 export type TxKind = 'manual' | 'cost' | 'refund';
@@ -13,6 +14,12 @@ export interface Transaction {
   referenceId: string | null;
   note: string | null;
   createdAt: string; // ISO
+}
+
+const NS = 'transactions';
+
+export function peekTransactions(): Transaction[] {
+  return peek<Transaction[]>(NS, []);
 }
 
 export async function logTransaction(args: {
@@ -111,16 +118,21 @@ export async function restoreTransaction(tx: Transaction): Promise<void> {
 }
 
 export async function getTransactions(limit = 500): Promise<Transaction[]> {
+  const cached = await load<Transaction[]>(NS, []);
+  return cached.slice(0, limit);
+}
+
+export async function refreshTransactions(limit = 500): Promise<Transaction[]> {
   const uid = await userId();
-  if (!uid) return [];
+  if (!uid) return getTransactions(limit);
   const { data, error } = await supabase
     .from('transactions')
     .select('id, account_id, amount, direction, kind, reference_id, note, created_at')
     .eq('user_id', uid)
     .order('created_at', { ascending: false })
     .limit(limit);
-  if (error || !data) return [];
-  return data.map((r) => ({
+  if (error || !data) return getTransactions(limit);
+  const transactions = data.map((r) => ({
     id: r.id,
     accountId: r.account_id,
     amount: Number(r.amount),
@@ -130,4 +142,6 @@ export async function getTransactions(limit = 500): Promise<Transaction[]> {
     note: r.note,
     createdAt: r.created_at,
   }));
+  await save(NS, transactions);
+  return transactions;
 }

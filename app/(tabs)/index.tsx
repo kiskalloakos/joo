@@ -1,7 +1,6 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   TouchableOpacity,
   Modal,
@@ -11,8 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { AppText as Text } from '../../components/AppText';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage, peekCurrencySettings } from '../../lib/currency';
 import { CURRENCIES } from '../../lib/currencies';
@@ -37,8 +36,6 @@ import {
   subscribeMonthlyReset,
 } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
-import { hintSeen, markHintSeen } from '../../lib/hints';
-import { SetupData, peekSetup, getSetup, refreshSetup, subscribeSetup, type CashViewMode } from '../../lib/setup';
 import { glowGreen, glowAmber, glowGreenHero } from '../../lib/glows';
 import { surface } from '../../lib/surface';
 import { feedback } from '../../lib/feedback';
@@ -46,6 +43,8 @@ import { parseAmount } from '../../lib/finance';
 import {
   Transaction,
   getTransactions,
+  peekTransactions,
+  refreshTransactions,
   logTransaction,
   updateTransaction,
   deleteTransaction,
@@ -53,10 +52,9 @@ import {
 } from '../../lib/transactions';
 import StatementSheet from '../../components/StatementSheet';
 import TrialBanner from '../../components/TrialBanner';
-import { useDragReorder } from '../../lib/useDragReorder';
-import DraggableRow from '../../components/DraggableRow';
-import SortableScroll from '../../components/SortableScroll';
-import { NestableDraggableFlatList, RenderItemParams } from 'react-native-draggable-flatlist';
+import Recurrings from './recurrings';
+import { registerHomeHeaderActions } from '../../lib/homeHeaderActions';
+import { getTabVisibility, peekTabVisibility, subscribeTabVisibility, type TabVisibility } from '../../lib/tabVisibility';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -94,8 +92,6 @@ function txEffect(t: Transaction): number {
 }
 
 export default function Dashboard() {
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
@@ -103,17 +99,7 @@ export default function Dashboard() {
   // IDENTITY (all 1.0) only on a cold start with no cache — _layout primes
   // this before mounting tabs, so we seed from peek() and resubscribe.
   const [rates, setRates] = useState<Rates>(() => peekRates());
-  // Recurrings can be toggled off in Settings; when it is, the Monthly
-  // Costs summary below is hidden (it taps through to that now-gone tab).
-  // Hero math is intentionally unchanged — costs still exist in data.
-  const [showRecurrings, setShowRecurrings] = useState(
-    () => peekSetup()?.showRecurrings ?? true,
-  );
-  // Cash accounts view mode: 'single' = one converted total in the display
-  // currency (today's behavior); 'breakdown' = totals grouped by currency.
-  const [cashViewMode, setCashViewMode] = useState<CashViewMode>(
-    () => peekSetup()?.cashViewMode ?? 'single',
-  );
+  const [tabVisibility, setTabVisibility] = useState<TabVisibility>(peekTabVisibility);
 
   const [accountModal, setAccountModal] = useState<{ visible: boolean; editing: Account | null }>({
     visible: false,
@@ -133,7 +119,7 @@ export default function Dashboard() {
   );
 
   const [historyVisible, setHistoryVisible] = useState(false);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>(peekTransactions);
   const [statement, setStatement] = useState<{ visible: boolean; year: number; month: number; label: string }>(
     { visible: false, year: new Date().getFullYear(), month: new Date().getMonth(), label: '' },
   );
@@ -148,11 +134,14 @@ export default function Dashboard() {
     setMoneyModal((prev) => ({ ...prev, visible: false }));
   }, []);
 
-  const openHistory = useCallback(async () => {
+  const openHistory = useCallback(() => {
     feedback.tap();
+    // Open immediately from the local cache. The server refresh runs behind
+    // the sheet, so opening Money log never waits on a round trip.
+    setTransactions(peekTransactions());
     setHistoryVisible(true);
-    const list = await getTransactions(500);
-    setTransactions(list);
+    getTransactions(500).then(setTransactions);
+    refreshTransactions(500).then(setTransactions);
   }, []);
 
   // The monthly auto-reset now lives in lib/dashboard (runs on any data
@@ -176,49 +165,13 @@ export default function Dashboard() {
     [],
   );
 
-  // One-time tip: the account rows have no visible edit/reorder affordance
-  // (deliberately — hidden by request), so the first time the user has at
-  // least one account on the Dashboard, slide up the same toast the Undo
-  // action uses to explain the gestures. Dashboard only mounts after
-  // onboarding, so reaching here already implies onboarding is done.
-  const reorderHintTried = useRef(false);
-  useEffect(() => {
-    if (reorderHintTried.current || accounts.length === 0) return;
-    reorderHintTried.current = true;
-    hintSeen('accountsReorder').then((seen) => {
-      if (seen) return;
-      markHintSeen('accountsReorder');
-      showToast(
-        'Tip: tap an account to edit it, or press & hold and drag to reorder.',
-        { label: 'Got it', onPress: () => {} },
-        8000,
-      );
-    });
-  }, [accounts.length]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const apply = (d: SetupData | null) => {
-      if (cancelled || !d) return;
-      setShowRecurrings(d.showRecurrings);
-      setCashViewMode(d.cashViewMode);
-    };
-    getSetup().then(apply);
-    refreshSetup().then(apply);
-    const unsubscribe = subscribeSetup((d) => {
-      if (cancelled) return;
-      setShowRecurrings(d.showRecurrings);
-      setCashViewMode(d.cashViewMode);
-    });
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, []);
-
   // Re-render when FX rates land or refresh (so cross-currency totals stay
   // accurate without a manual reload).
   useEffect(() => subscribeRates(setRates), []);
+  useEffect(() => {
+    getTabVisibility().then(setTabVisibility);
+    return subscribeTabVisibility(setTabVisibility);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -242,8 +195,7 @@ export default function Dashboard() {
   );
 
   // ── Math ──────────────────────────────────────────────────────────────────
-  // `currency` is the dashboard display currency (per-page override falling
-  // back to global). Cash accounts may now carry their own currency; we
+  // `currency` is the global display/default currency. Cash accounts may now carry their own currency; we
   // bucket them per currency, then convert each bucket into the display
   // currency for the hero `totalLiquid`. Accounts with no per-row currency
   // are treated as the display currency (no conversion).
@@ -256,13 +208,20 @@ export default function Dashboard() {
     (s, [ccy, amt]) => s + convert(amt, ccy, currency, rates.rates),
     0,
   );
+  // Cash accounts are a read-only list now, so make the most useful order
+  // automatic: highest balance first. The stored position remains intact.
+  const sortedAccounts = [...accounts].sort(
+    (a, b) => parseAmt(b.amount) - parseAmt(a.amount),
+  );
   // Monthly costs only — periodic (quarterly/yearly) bills are kept out of the
   // dashboard figure on purpose and live in Recurrings' separate section.
-  // Costs stay single-currency (display currency) by design; multi-currency
-  // is limited to Cash Accounts for now.
   const monthlyCosts = costs.filter((c) => (c.intervalMonths ?? 1) === 1);
-  const unpaidCosts = monthlyCosts.reduce((s, c) => (c.paid ? s : s + parseAmt(c.amount)), 0);
+  const unpaidCosts = monthlyCosts.reduce(
+    (s, c) => c.paid ? s : s + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates),
+    0,
+  );
   const afterPayments = totalLiquid - unpaidCosts;
+  const showAfterPayments = tabVisibility.recurrings && unpaidCosts > 0;
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
   const symbolFor = (code: string) =>
     CURRENCIES.find((c) => c.code === code)?.symbol ?? code + ' ';
@@ -304,55 +263,6 @@ export default function Dashboard() {
     await persistAccount(account);
   };
 
-  // The view-mode toggle now lives only in Settings ("Breakdown by
-  // currency"). The Dashboard reads cashViewMode and conditionally renders
-  // the per-currency breakdown INSIDE the hero card (further down). No
-  // inline button — keeps the Cash Accounts header clean.
-
-  // ── Drag-to-reorder ───────────────────────────────────────────────────────
-  const reorderAccounts = useCallback(async (next: Account[]) => {
-    const repositioned = next.map((a, i) => ({ ...a, position: i }));
-    feedback.dragEnd();
-    setAccounts((prev) => {
-      // Persist any row whose position actually changed
-      for (const a of repositioned) {
-        const orig = prev.find((p) => p.id === a.id);
-        if (orig && orig.position !== a.position) persistAccount(a);
-      }
-      return repositioned;
-    });
-  }, []);
-
-  const accountDrag = useDragReorder(accounts, reorderAccounts);
-
-  // ── Native renderers for NestableDraggableFlatList ────────────────────────
-  // Per-account currency: amount renders with the account's own symbol
-  // (falls back to dashboard display ccy for legacy NULL rows).
-  const renderAccountItem = useCallback(
-    ({ item: account, drag, isActive }: RenderItemParams<Account>) => {
-      const accountSymbol = symbolFor(account.currency ?? currency);
-      return (
-        <View style={[s.row, isActive && s.rowDragging]}>
-          {/* No visible edit affordance: tap the row to edit, long-press to
-              reorder (the 3-line handle's old job, now bound to the row). */}
-          <TouchableOpacity
-            style={s.rowBody}
-            onPress={() => openEditAccount(account)}
-            onLongPress={accounts.length > 1 ? drag : undefined}
-            delayLongPress={150}
-            activeOpacity={0.2}
-          >
-            <Text style={s.rowLabel}>{account.name}</Text>
-            <View style={s.rowRight}>
-              <Text style={s.rowValue}>{fmt(parseAmt(account.amount), accountSymbol)}</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      );
-    },
-    [accounts.length, currency],
-  );
-
   const deleteAccount = async (account: Account) => {
     setAccountModal({ visible: false, editing: null });
     setAccounts((prev) => prev.filter((a) => a.id !== account.id));
@@ -368,7 +278,7 @@ export default function Dashboard() {
   };
 
   // ── Add / Remove money flow ───────────────────────────────────────────────
-  const openMoneyFlow = (mode: 'add' | 'remove') => {
+  const openMoneyFlow = useCallback((mode: 'add' | 'remove') => {
     if (accounts.length === 0) {
       feedback.error();
       Alert.alert('No accounts', 'Add a cash account first.');
@@ -379,7 +289,16 @@ export default function Dashboard() {
     setMoneyNote('');
     setMoneyCurrency(peekCurrencySettings().global);
     setMoneyModal({ visible: true, mode });
-  };
+  }, [accounts.length]);
+
+  useEffect(
+    () =>
+      registerHomeHeaderActions({
+        add: () => openMoneyFlow('add'),
+        remove: () => openMoneyFlow('remove'),
+      }),
+    [openMoneyFlow],
+  );
 
   const commitMoney = async (account: Account) => {
     const entered = parseAmt(moneyAmount);
@@ -503,46 +422,30 @@ export default function Dashboard() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom }]}>
-      <View style={[s.header, { justifyContent: 'center' }]}>
-        <View style={s.headerActions}>
-          <TouchableOpacity style={s.headerRemoveBtn} onPress={() => openMoneyFlow('remove')}>
-            <Ionicons name="remove" size={24} color="#FFA94D" style={glowAmber} />
-          </TouchableOpacity>
-          <TouchableOpacity style={s.headerAddBtn} onPress={() => openMoneyFlow('add')}>
-            <Ionicons name="add" size={24} color="#00C896" style={glowGreen} />
-          </TouchableOpacity>
-        </View>
-      </View>
+    <View style={s.container} collapsable={false}>
 
-      <SortableScroll contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <TrialBanner />
 
         {/* Hero */}
         <TouchableOpacity style={s.heroCard} onPress={openHistory} activeOpacity={0.85}>
-          <View style={s.heroTopRow}>
-            <Text style={s.heroLabel}>AFTER MONTHLY PAYMENTS</Text>
-            <Ionicons name="chevron-forward" size={18} color="#555" />
-          </View>
-          <Text style={s.heroAmount}>{fmt(afterPayments, symbol)}</Text>
-          <View style={s.heroDivider} />
-          <View style={s.heroRow}>
-            <Text style={s.heroSubLabel}>Current liquidity</Text>
-            <Text style={s.heroSubValue}>{fmt(totalLiquid, symbol)}</Text>
-          </View>
-          {/* Per-currency breakdown, only when the user has 2+ currencies in
-              play AND the Settings toggle is ON. Single-currency users see
-              the original compact hero — no clutter. */}
-          {cashViewMode === 'breakdown' && Object.keys(liquidByCcy).length > 1 && (
+          {showAfterPayments ? (
             <>
+              <View style={s.heroTopRow}>
+                <Text style={s.heroLabel}>AFTER MONTHLY PAYMENTS</Text>
+                <Ionicons name="chevron-forward" size={18} color="#555" />
+              </View>
+              <Text style={s.heroAmount}>{fmt(afterPayments, symbol)}</Text>
               <View style={s.heroDivider} />
-              <Text style={s.heroBreakdownLabel}>BY CURRENCY</Text>
-              {Object.entries(liquidByCcy).map(([ccy, amt]) => (
-                <View key={ccy} style={s.heroBreakdownRow}>
-                  <Text style={s.heroBreakdownCcy}>{ccy}</Text>
-                  <Text style={s.heroBreakdownValue}>{fmt(amt, symbolFor(ccy))}</Text>
-                </View>
-              ))}
+              <View style={s.heroRow}>
+                <Text style={s.heroSubLabel}>Current liquidity</Text>
+                <Text style={s.heroSubValue}>{fmt(totalLiquid, symbol)}</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={s.heroLabel}>CURRENT LIQUIDITY</Text>
+              <Text style={s.heroAmount}>{fmt(totalLiquid, symbol)}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -562,42 +465,14 @@ export default function Dashboard() {
             </TouchableOpacity>
           ) : (
             <>
-              {Platform.OS === 'web' ? (
-                accounts.map((account) => {
-                  const d = accountDrag(account.id);
-                  const accountSymbol = symbolFor(account.currency ?? currency);
-                  return (
-                    <DraggableRow
-                      key={account.id}
-                      handlers={{ ...d, draggable: d.draggable && accounts.length > 1 }}
-                      style={[
-                        s.row,
-                        d.isDragging && s.rowDragging,
-                        d.isHovered && s.rowDropTarget,
-                      ]}
-                    >
-                      <TouchableOpacity
-                        style={s.rowBody}
-                        onPress={() => openEditAccount(account)}
-                        activeOpacity={0.2}
-                      >
-                        <Text style={s.rowLabel}>{account.name}</Text>
-                        <View style={s.rowRight}>
-                          <Text style={s.rowValue}>{fmt(parseAmt(account.amount), accountSymbol)}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </DraggableRow>
-                  );
-                })
-              ) : (
-                <NestableDraggableFlatList
-                  data={accounts}
-                  keyExtractor={(a) => a.id}
-                  renderItem={renderAccountItem}
-                  onDragEnd={({ data }) => reorderAccounts(data)}
-                  activationDistance={5}
-                />
-              )}
+              {sortedAccounts.map((account) => (
+                <TouchableOpacity key={account.id} style={s.rowBody} onPress={() => openEditAccount(account)} activeOpacity={0.2}>
+                  <Text style={s.rowLabel}>{account.name}</Text>
+                  <View style={s.rowRight}>
+                    <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbolFor(account.currency ?? currency))}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
               <TouchableOpacity style={s.addCostRow} onPress={openAddAccount}>
                 <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
                 <Text style={[s.addCostText, glowGreen]}>Add Account</Text>
@@ -606,34 +481,21 @@ export default function Dashboard() {
           )}
         </View>
 
-        {/* Monthly costs — managed in Recurrings; this is a tap-through
-            summary, so it's hidden when that tab is toggled off. */}
-        {showRecurrings && (
-          <TouchableOpacity
-            style={s.card}
-            activeOpacity={0.7}
-            onPress={() => router.navigate('/recurrings')}
-          >
-            <View style={s.cardHeader}>
-              <View>
-                <Text style={s.cardTitle}>Monthly Costs</Text>
-                <Text style={s.cardSubtitle}>
-                  {fmt(unpaidCosts, symbol)} unpaid · {fmt(monthlyCosts.reduce((sum, c) => sum + parseAmt(c.amount), 0), symbol)} total
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#555" />
-            </View>
-          </TouchableOpacity>
-        )}
+        {tabVisibility.recurrings && <Recurrings embedded />}
 
         <View style={{ height: 40 }} />
-      </SortableScroll>
+      </ScrollView>
 
       {/* Account Modal */}
       <Modal visible={accountModal.visible} transparent animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={s.overlay}>
             <View style={s.sheet}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 8 }}
+              >
               <Text style={s.sheetTitle}>
                 {accountModal.editing ? 'Edit Account' : 'Add Account'}
               </Text>
@@ -656,13 +518,7 @@ export default function Dashboard() {
                 keyboardType="decimal-pad"
               />
               <Text style={s.inputLabel}>Currency</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={s.ccyPicker}
-                contentContainerStyle={s.ccyPickerContent}
-                keyboardShouldPersistTaps="handled"
-              >
+              <View style={s.ccyPickerContent}>
                 {CURRENCIES.map((c) => (
                   <TouchableOpacity
                     key={c.code}
@@ -675,11 +531,11 @@ export default function Dashboard() {
                         formCurrency === c.code && s.ccyPillTextActive,
                       ]}
                     >
-                      {c.code}
+                      {c.symbol} {c.code}
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
               <View style={s.sheetActions}>
                 <TouchableOpacity
                   style={s.btnCancel}
@@ -700,6 +556,7 @@ export default function Dashboard() {
                   <Text style={s.deleteLinkText}>Delete account</Text>
                 </TouchableOpacity>
               )}
+              </ScrollView>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -716,7 +573,6 @@ export default function Dashboard() {
               onPress={closeMoneyModal}
             />
             <View style={s.sheet}>
-              <View style={s.dragHandleBar} />
               <View style={s.sheetHeaderRow}>
                 <Text style={[s.sheetTitle, { marginBottom: 0 }]}>
                   {moneyModal.mode === 'add' ? 'Add money' : 'Remove money'}
@@ -748,13 +604,7 @@ export default function Dashboard() {
                 />
 
                 <Text style={s.inputLabel}>Currency</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={s.ccyPicker}
-                  contentContainerStyle={s.ccyPickerContent}
-                  keyboardShouldPersistTaps="handled"
-                >
+                <View style={s.ccyPickerContent}>
                   {CURRENCIES.map((c) => (
                     <TouchableOpacity
                       key={c.code}
@@ -767,11 +617,11 @@ export default function Dashboard() {
                           moneyCurrency === c.code && s.ccyPillTextActive,
                         ]}
                       >
-                        {c.code}
+                        {c.symbol} {c.code}
                       </Text>
                     </TouchableOpacity>
                   ))}
-                </ScrollView>
+                </View>
 
                 <Text style={s.inputLabel}>Note (optional)</Text>
                 <TextInput
@@ -969,12 +819,12 @@ const s = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  scroll: { paddingHorizontal: 16 },
+  scroll: { paddingHorizontal: 16, paddingTop: 112 },
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5 },
   heroAmount: {
-    fontSize: 40,
+    fontSize: 50,
     fontWeight: '800',
     color: '#00C896',
     letterSpacing: -1.2,
@@ -1171,21 +1021,22 @@ const s = StyleSheet.create({
 
   // Currency picker pills inside the account add/edit modal.
   ccyPicker: { marginBottom: 20 },
-  ccyPickerContent: { gap: 8, paddingRight: 16 },
+  ccyPickerContent: { flexDirection: 'row', flexWrap: 'nowrap', gap: 4, marginBottom: 20 },
   ccyPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 10,
     backgroundColor: '#222',
     borderWidth: 1,
-    borderColor: '#2C2C2C',
+    borderColor: '#333',
   },
-  ccyPillActive: {
-    backgroundColor: '#0D1F1A',
-    borderColor: '#1F3A30',
-  },
-  ccyPillText: { fontSize: 13, color: '#888', fontWeight: '600', letterSpacing: 0.4 },
-  ccyPillTextActive: { color: '#00C896' },
+  ccyPillActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  ccyPillText: { fontSize: 11, color: '#999', fontWeight: '600', textAlign: 'center' },
+  ccyPillTextActive: { color: '#07120F' },
 
   // Per-currency breakdown rendered INSIDE the hero card when the user has
   // multiple currencies AND the Settings toggle is on. Hero stays compact

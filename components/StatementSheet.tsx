@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -10,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { AppText as Text } from './AppText';
 import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Transaction } from '../lib/transactions';

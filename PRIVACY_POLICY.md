@@ -20,7 +20,7 @@ We only collect what you give us:
   Your password is handled by our authentication provider (Supabase) and is
   stored only in a hashed form — we never see or store your plaintext password.
 - **Financial data you enter:** cash account names and balances, recurring and
-  periodic costs, debts, revenue, savings, investments, goals, and the money
+  periodic costs, debts, revenue, savings, investments, and the money
   in/out transaction log. This is the data the app exists to track.
 
 We do **not** collect device location, contacts, photos, advertising

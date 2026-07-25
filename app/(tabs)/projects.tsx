@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   Pressable,
   TouchableOpacity,
@@ -12,7 +11,7 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -37,6 +36,7 @@ import {
   saveProjectCost,
   deleteProjectCost,
 } from '../../lib/projects';
+import { registerProjectsHeaderAction } from '../../lib/projectsHeaderActions';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -49,7 +49,7 @@ function symbolFor(code: string): string {
 }
 
 // 'YYYY-MM-DD' <-> Date in LOCAL time so the picked day can't drift across a
-// timezone boundary (mirrors Goals' date handling).
+// timezone boundary for project scheduling.
 function parseYMD(iso?: string | null): Date {
   if (iso) {
     const d = new Date(iso + 'T00:00:00');
@@ -69,7 +69,6 @@ function fmtDate(iso?: string | null): string | null {
 }
 
 export default function Projects() {
-  const insets = useSafeAreaInsets();
   const [data, setData] = useState<ProjectsData>(peekProjects);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('projects'));
   const [rates, setRates] = useState<Rates>(() => peekRates());
@@ -114,11 +113,13 @@ export default function Projects() {
   });
   const [projectName, setProjectName] = useState('');
 
-  const openAddProject = () => {
+  const openAddProject = useCallback(() => {
     setProjectName('');
     feedback.tap();
     setProjectModal({ visible: true, editing: null });
-  };
+  }, []);
+
+  useFocusEffect(useCallback(() => registerProjectsHeaderAction(openAddProject), [openAddProject]));
   const openEditProject = (p: Project) => {
     setProjectName(p.name);
     feedback.tap();
@@ -353,15 +354,8 @@ export default function Projects() {
   };
 
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom }]}>
+    <View style={s.container} collapsable={false}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <View style={s.headerRow}>
-          <Text style={s.title}>Your projects</Text>
-          <TouchableOpacity style={s.addBtn} onPress={openAddProject}>
-            <Ionicons name="add" size={20} color="#00C896" style={glowGreen} />
-          </TouchableOpacity>
-        </View>
-
         {data.projects.length === 0 ? (
           <TouchableOpacity style={s.empty} onPress={openAddProject} activeOpacity={0.8}>
             <Ionicons name="construct-outline" size={28} color="#333" />
@@ -497,13 +491,7 @@ export default function Projects() {
                 />
 
                 <Text style={s.inputLabel}>Currency</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={s.ccyPicker}
-                  contentContainerStyle={s.ccyPickerContent}
-                  keyboardShouldPersistTaps="handled"
-                >
+                <View style={s.ccyPickerContent}>
                   {CURRENCIES.map((c) => (
                     <TouchableOpacity
                       key={c.code}
@@ -516,11 +504,11 @@ export default function Projects() {
                           costCurrency === c.code && s.ccyPillTextActive,
                         ]}
                       >
-                        {c.code}
+                          {c.symbol} {c.code}
                       </Text>
                     </TouchableOpacity>
                   ))}
-                </ScrollView>
+                </View>
 
                 <Text style={s.inputLabel}>Date — optional</Text>
                 {Platform.OS === 'web' ? (
@@ -626,7 +614,7 @@ export default function Projects() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
-  scroll: { paddingHorizontal: 16, paddingTop: 6 },
+  scroll: { paddingHorizontal: 16, paddingTop: 112 },
 
   headerRow: {
     flexDirection: 'row',
@@ -782,18 +770,22 @@ const s = StyleSheet.create({
 
   // Currency picker pills (matches the Add/Remove money sheet)
   ccyPicker: { marginBottom: 20 },
-  ccyPickerContent: { gap: 8, paddingRight: 16 },
+  ccyPickerContent: { flexDirection: 'row', flexWrap: 'nowrap', gap: 4, marginBottom: 20 },
   ccyPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 10,
     backgroundColor: '#222',
     borderWidth: 1,
-    borderColor: '#2C2C2C',
+    borderColor: '#333',
   },
-  ccyPillActive: { backgroundColor: '#0D1F1A', borderColor: '#1F3A30' },
-  ccyPillText: { fontSize: 13, color: '#888', fontWeight: '600', letterSpacing: 0.4 },
-  ccyPillTextActive: { color: '#00C896' },
+  ccyPillActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  ccyPillText: { fontSize: 11, color: '#999', fontWeight: '600', textAlign: 'center' },
+  ccyPillTextActive: { color: '#07120F' },
 
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {

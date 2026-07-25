@@ -9,32 +9,20 @@ export type PageKey = 'dashboard' | 'investments' | 'savings' | 'revenue' | 'deb
 
 export interface CurrencySettings {
   global: string;
-  overrides: Partial<Record<PageKey, string>>;
 }
 
-const EMPTY: CurrencySettings = { global: DEFAULT_CURRENCY, overrides: {} };
-
-function columnFor(page: PageKey): string {
-  return `${page}_currency`;
-}
+const EMPTY: CurrencySettings = { global: DEFAULT_CURRENCY };
 
 async function fromRemote(): Promise<CurrencySettings | null> {
   const uid = await userId();
   if (!uid) return null;
   const { data, error } = await supabase
     .from('user_settings')
-    .select('currency, dashboard_currency, investments_currency, savings_currency, revenue_currency, debts_currency, projects_currency')
+    .select('currency')
     .eq('user_id', uid)
     .maybeSingle();
   if (error || !data) return null;
-  const overrides: Partial<Record<PageKey, string>> = {};
-  if (data.dashboard_currency) overrides.dashboard = data.dashboard_currency;
-  if (data.investments_currency) overrides.investments = data.investments_currency;
-  if (data.savings_currency) overrides.savings = data.savings_currency;
-  if (data.revenue_currency) overrides.revenue = data.revenue_currency;
-  if (data.debts_currency) overrides.debts = data.debts_currency;
-  if (data.projects_currency) overrides.projects = data.projects_currency;
-  return { global: data.currency ?? DEFAULT_CURRENCY, overrides };
+  return { global: data.currency ?? DEFAULT_CURRENCY };
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -42,20 +30,20 @@ async function fromRemote(): Promise<CurrencySettings | null> {
 export function peekCurrencySettings(): CurrencySettings {
   // Backward-compat: older cache stored a plain string.
   const cached = peek<CurrencySettings | string>(NS, EMPTY);
-  if (typeof cached === 'string') return { global: cached, overrides: {} };
-  return cached;
+  if (typeof cached === 'string') return { global: cached };
+  return { global: cached.global ?? DEFAULT_CURRENCY };
 }
 
-export function peekCurrencyForPage(page: PageKey): string {
+export function peekCurrencyForPage(_page: PageKey): string {
   const s = peekCurrencySettings();
-  return s.overrides[page] ?? s.global;
+  return s.global;
 }
 
 export async function getCurrencySettings(): Promise<CurrencySettings> {
   // Backward-compat: older cache stored a plain string.
   const cached = await load<CurrencySettings | string>(NS, EMPTY);
-  if (typeof cached === 'string') return { global: cached, overrides: {} };
-  return cached;
+  if (typeof cached === 'string') return { global: cached };
+  return { global: cached.global ?? DEFAULT_CURRENCY };
 }
 
 export async function refreshCurrencySettings(): Promise<CurrencySettings> {
@@ -65,17 +53,17 @@ export async function refreshCurrencySettings(): Promise<CurrencySettings> {
 }
 
 // For tab screens (returns effective currency for that page)
-export async function getCurrencyForPage(page: PageKey): Promise<string> {
+export async function getCurrencyForPage(_page: PageKey): Promise<string> {
   const s = await getCurrencySettings();
-  return s.overrides[page] ?? s.global;
+  return s.global;
 }
 
-export async function refreshCurrencyForPage(page: PageKey): Promise<string> {
+export async function refreshCurrencyForPage(_page: PageKey): Promise<string> {
   const s = await refreshCurrencySettings();
-  return s.overrides[page] ?? s.global;
+  return s.global;
 }
 
-// Update the global currency. Pages without overrides will follow.
+// Update the global default/display currency. Existing items keep their own currency.
 export async function saveGlobalCurrency(code: string): Promise<void> {
   const settings = await getCurrencySettings();
   const updated: CurrencySettings = { ...settings, global: code };
@@ -89,28 +77,8 @@ export async function saveGlobalCurrency(code: string): Promise<void> {
   );
 }
 
-// Set or clear an override for one page (pass null to clear → page falls back to global).
-export async function saveOverrideCurrency(
-  page: PageKey,
-  code: string | null,
-): Promise<void> {
-  const settings = await getCurrencySettings();
-  const overrides = { ...settings.overrides };
-  if (code === null) delete overrides[page];
-  else overrides[page] = code;
-  const updated: CurrencySettings = { ...settings, overrides };
-  await save(NS, updated);
-  const uid = await userId();
-  if (!uid) return;
-  await reportable(
-    supabase
-      .from('user_settings')
-      .upsert({ user_id: uid, [columnFor(page)]: code }, { onConflict: 'user_id' }),
-  );
-}
-
 // ── Backward-compat aliases ─────────────────────────────────────────────────
-// Existing callers that don't care about per-page state keep working.
+// Existing callers that only need the global default keep working.
 export async function getCurrency(): Promise<string> {
   return (await getCurrencySettings()).global;
 }

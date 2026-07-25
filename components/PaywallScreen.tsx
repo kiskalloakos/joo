@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   View,
-  Text,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
   Image,
 } from 'react-native';
+import { AppText as Text } from './AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
@@ -92,7 +92,7 @@ export default function PaywallScreen({ onUnlocked }: { onUnlocked: () => void }
           </Text>
 
           {[
-            'Every account, cost, debt & goal — unlimited',
+            'Every account, cost, and debt — unlimited',
             'Cloud sync across your devices',
             'All projections, currencies & tabs',
             'Future updates included',

@@ -29,56 +29,6 @@ export function fv(pv: number, pmt: number, annualRate: number, months: number):
   return pv * Math.pow(1 + r, months) + pmt * ((Math.pow(1 + r, months) - 1) / r);
 }
 
-// Net-worth roll-up. The boolean defaults are deliberate and load-bearing:
-// investments/debts default ON when the flag is undefined (`!== false`),
-// savings defaults OFF (`=== true`). A null setup (not yet loaded) therefore
-// counts cash + investments − debts. Returns the full breakdown so the screen
-// has a single source of truth for both the number and row visibility.
-export interface NetWorthSetup {
-  showInvestments?: boolean;
-  showSavings?: boolean;
-  showDebts?: boolean;
-  includeDebtsInNetWorth?: boolean;
-}
-export interface NetWorthBreakdown {
-  investmentsEnabled: boolean;
-  savingsEnabled: boolean;
-  debtsEnabled: boolean;
-  debtsCountInTotal: boolean;
-  investedTotal: number;
-  netWorth: number;
-}
-// `assets` (manually-tracked house/car/valuables) always counts toward net
-// worth — no gating. Defaulted/last so existing call sites stay valid.
-export function computeNetWorth(
-  cash: number,
-  invested: number,
-  saved: number,
-  debts: number,
-  setup: NetWorthSetup | null,
-  assets = 0,
-): NetWorthBreakdown {
-  const investmentsEnabled = setup?.showInvestments !== false;
-  const savingsEnabled = setup?.showSavings === true;
-  const debtsEnabled = setup?.showDebts !== false;
-  const debtsCountInTotal = debtsEnabled && setup?.includeDebtsInNetWorth !== false;
-  const investedTotal = (investmentsEnabled ? invested : 0) + (savingsEnabled ? saved : 0);
-  const netWorth = cash + investedTotal + assets - (debtsCountInTotal ? debts : 0);
-  return { investmentsEnabled, savingsEnabled, debtsEnabled, debtsCountInTotal, investedTotal, netWorth };
-}
-
-// How much to set aside per month to hit a goal's target by its deadline.
-// Never negative; if already at/over target → 0. monthsLeft is clamped to
-// >= 1 so a same-month deadline doesn't divide by zero.
-export function goalMonthlyPace(
-  target: number,
-  current: number,
-  monthsLeft: number,
-): number {
-  const remaining = Math.max(0, target - current);
-  return remaining / Math.max(1, monthsLeft);
-}
-
 // Whole months from one "YYYY-MM" key to another (signed; year-aware).
 // monthDiff('2025-12', '2026-01') === 1.
 export function monthDiff(from: string, to: string): number {

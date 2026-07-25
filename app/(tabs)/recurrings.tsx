@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   StyleSheet,
   Pressable,
@@ -12,6 +11,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import { AppText as Text } from '../../components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,7 +37,7 @@ import {
   currentMonthKey,
 } from '../../lib/dashboard';
 import { logTransaction, deleteLastCostTransaction } from '../../lib/transactions';
-import { nextOccurrence, annualizedPeriodicTotal, parseAmount } from '../../lib/finance';
+import { nextOccurrence, parseAmount } from '../../lib/finance';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen, glowAmber } from '../../lib/glows';
@@ -79,7 +79,7 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export default function Recurrings() {
+export default function Recurrings({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets();
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
@@ -125,6 +125,7 @@ export default function Recurrings() {
   });
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
+  const [formCurrency, setFormCurrency] = useState(() => peekCurrencyForPage('dashboard'));
   const [formDueDay, setFormDueDay] = useState('1');
   const [formMode, setFormMode] = useState<FreqMode>('monthly');
   const [formCustomN, setFormCustomN] = useState('2');
@@ -139,6 +140,7 @@ export default function Recurrings() {
   const openAdd = () => {
     setFormName('');
     setFormAmount('');
+    setFormCurrency(currency);
     setFormDueDay(String(new Date().getDate()));
     setFormMode('monthly');
     setFormCustomN('2');
@@ -150,6 +152,7 @@ export default function Recurrings() {
   const openEdit = (cost: Cost) => {
     setFormName(cost.name);
     setFormAmount(cost.amount);
+    setFormCurrency(cost.currency ?? currency);
     setFormDueDay(String(cost.dueDay ?? 1));
     const interval = cost.intervalMonths ?? 1;
     const mode = modeForInterval(interval);
@@ -169,7 +172,7 @@ export default function Recurrings() {
     // recur every month so it carries no meaning — store null.
     const dueMonth = intervalMonths === 1 ? null : formDueMonth;
     const cost: Cost = editing
-      ? { ...editing, name: formName.trim(), amount: formAmount, dueDay, intervalMonths, dueMonth }
+      ? { ...editing, name: formName.trim(), amount: formAmount, currency: formCurrency, dueDay, intervalMonths, dueMonth }
       : {
           id: newId(),
           name: formName.trim(),
@@ -182,6 +185,7 @@ export default function Recurrings() {
           paidFromAccountId: null,
           paidMonth: null,
           paidAmount: null,
+          currency: formCurrency,
         };
     setCosts(
       editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost],
@@ -283,8 +287,9 @@ export default function Recurrings() {
     // account may hold a different one. Convert into the account's currency,
     // then snapshot the deducted figure on the cost so un-pay refunds exactly
     // what left — no FX drift, and ledger stays in the account's currency.
+    const costCcy = cost.currency ?? currency;
     const accountCcy = account.currency ?? currency;
-    const deducted = convert(parseAmt(cost.amount), currency, accountCcy, rates.rates);
+    const deducted = convert(parseAmt(cost.amount), costCcy, accountCcy, rates.rates);
     const updatedAccount: Account = {
       ...account,
       amount: String(parseAmt(account.amount) - deducted),
@@ -322,19 +327,27 @@ export default function Recurrings() {
   const monthlyCosts = costs.filter((c) => (c.intervalMonths ?? 1) === 1);
   const periodicCosts = costs.filter((c) => (c.intervalMonths ?? 1) !== 1);
 
-  const total = monthlyCosts.reduce((sum, c) => sum + parseAmt(c.amount), 0);
-  const paid = monthlyCosts.reduce((sum, c) => (c.paid ? sum + parseAmt(c.amount) : sum), 0);
+  const total = monthlyCosts.reduce((sum, c) => sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates), 0);
+  const paid = monthlyCosts.reduce((sum, c) => (c.paid ? sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates) : sum), 0);
   const left = Math.max(0, total - paid);
   const pct = total > 0 ? Math.min(1, paid / total) : 0;
 
-  const sorted = [...monthlyCosts].sort((a, b) => (a.dueDay ?? 1) - (b.dueDay ?? 1));
+  // Unpaid bills always lead the list. Within each paid/unpaid group, preserve
+  // the natural due-date order so the next thing to pay is still first.
+  const sorted = [...monthlyCosts].sort(
+    (a, b) => Number(a.paid) - Number(b.paid) || (a.dueDay ?? 1) - (b.dueDay ?? 1),
+  );
 
   // Periodic: annualized headline, rows sorted by their next due date.
-  const annualPeriodic = annualizedPeriodicTotal(periodicCosts);
+  const annualPeriodic = periodicCosts.reduce(
+    (sum, c) => sum + convert(parseAmt(c.amount) * 12 / (c.intervalMonths ?? 1), c.currency ?? currency, currency, rates.rates),
+    0,
+  );
   const periodicSorted = [...periodicCosts]
     .map((c) => ({ c, due: nextOccurrence(c.dueMonth ?? 1, c.intervalMonths ?? 12) }))
     .sort(
       (a, b) =>
+        Number(a.c.paid) - Number(b.c.paid) ||
         a.due.year - b.due.year ||
         a.due.month - b.due.month ||
         (a.c.dueDay ?? 1) - (b.c.dueDay ?? 1),
@@ -353,7 +366,7 @@ export default function Recurrings() {
         <Text style={s.rowDue}>{subtitle}</Text>
       </View>
       <Text style={[s.rowAmount, c.paid && s.rowAmountPaid]}>
-        {fmt(parseAmt(c.amount), symbol)}
+        {fmt(parseAmt(c.amount), CURRENCIES.find((x) => x.code === (c.currency ?? currency))?.symbol ?? symbol)}
       </Text>
       <Pressable
         onPress={() => tapTickbox(c)}
@@ -371,20 +384,34 @@ export default function Recurrings() {
   );
 
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom }]}>
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+    <View style={[s.container, embedded ? s.embeddedContainer : { paddingBottom: insets.bottom }]}>
+      <ScrollView
+        contentContainerStyle={[s.scroll, embedded && s.embeddedScroll]}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!embedded}
+      >
         {/* Hero — paid / left this month */}
         <View style={s.heroCard}>
-          <View style={s.heroRow}>
-            <View>
-              <Text style={s.heroLabel}>LEFT TO PAY</Text>
-              <Text style={[s.heroAmount, glowAmber]}>{fmt(left, symbol)}</Text>
+          {left === 0 && total > 0 ? (
+            <View style={s.completeHeroRow}>
+              <View>
+                <Text style={s.heroLabel}>PAID SO FAR</Text>
+                <Text style={[s.heroPaidComplete, glowGreen]}>{fmt(paid, symbol)}</Text>
+              </View>
+              <View style={s.completeCheck}><Ionicons name="checkmark" size={25} color="#00C896" style={glowGreen} /></View>
             </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={s.heroLabel}>PAID SO FAR</Text>
-              <Text style={[s.heroPaid, glowGreen]}>{fmt(paid, symbol)}</Text>
+          ) : (
+            <View style={s.heroRow}>
+              <View>
+                <Text style={s.heroLabel}>LEFT TO PAY</Text>
+                <Text style={[s.heroAmount, glowAmber]}>{fmt(left, symbol)}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={s.heroLabel}>PAID SO FAR</Text>
+                <Text style={[s.heroPaid, glowGreen]}>{fmt(paid, symbol)}</Text>
+              </View>
             </View>
-          </View>
+          )}
           <View
             style={s.barTrack}
             onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
@@ -398,10 +425,12 @@ export default function Recurrings() {
               />
             </View>
           </View>
-          <Text style={s.heroSub}>
-            {fmt(total, symbol)} monthly · {monthlyCosts.length}{' '}
-            {monthlyCosts.length === 1 ? 'recurring' : 'recurrings'}
-          </Text>
+          {left > 0 && (
+            <Text style={s.heroSub}>
+              {fmt(total, symbol)} monthly · {monthlyCosts.length}{' '}
+              {monthlyCosts.length === 1 ? 'recurring' : 'recurrings'}
+            </Text>
+          )}
         </View>
 
         {/* Monthly */}
@@ -451,6 +480,10 @@ export default function Recurrings() {
                 }`,
               ),
             )}
+            <TouchableOpacity style={s.addCostRow} onPress={openAdd}>
+              <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
+              <Text style={[s.addCostText, glowGreen]}>Add Periodic</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -483,7 +516,15 @@ export default function Recurrings() {
               />
               <View style={s.row2col}>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.inputLabel}>Amount ({currency})</Text>
+                  <Text style={s.inputLabel}>Currency</Text>
+                  <View style={s.currencyGrid}>
+                    {CURRENCIES.map((item) => (
+                      <TouchableOpacity key={item.code} style={[s.currencyPill, formCurrency === item.code && s.currencyPillActive]} onPress={() => setFormCurrency(item.code)}>
+                        <Text style={[s.currencyPillText, formCurrency === item.code && s.currencyPillTextActive]}>{item.symbol} {item.code}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={s.inputLabel}>Amount ({formCurrency})</Text>
                   <TextInput
                     style={s.input}
                     value={formAmount}
@@ -642,16 +683,17 @@ export default function Recurrings() {
                 </View>
                 <Ionicons name="checkmark-circle-outline" size={18} color="#666" />
               </TouchableOpacity>
-              {accounts.map((account, i) => {
+              {accountPicker.cost && accounts.map((account, i) => {
                 // Each account renders in its OWN currency. The cost (in the
                 // page's display currency) is converted into that currency
                 // before the balance preview and the actual deduction.
+                const selectedCost = accountPicker.cost;
+                if (!selectedCost) return null;
+                const costCcy = selectedCost.currency ?? currency;
                 const accountCcy = account.currency ?? currency;
                 const accountSymbol =
                   CURRENCIES.find((c) => c.code === accountCcy)?.symbol ?? accountCcy + ' ';
-                const costInAccountCcy = accountPicker.cost
-                  ? convert(parseAmt(accountPicker.cost.amount), currency, accountCcy, rates.rates)
-                  : 0;
+                const costInAccountCcy = convert(parseAmt(selectedCost.amount), costCcy, accountCcy, rates.rates);
                 const newBalance = parseAmt(account.amount) - costInAccountCcy;
                 const goesNegative = newBalance < 0;
                 return (
@@ -665,7 +707,7 @@ export default function Recurrings() {
                       <Text style={[s.pickerBalance, goesNegative && s.pickerNegative]}>
                         {fmt(parseAmt(account.amount), accountSymbol)} → {fmt(newBalance, accountSymbol)}
                       </Text>
-                      {accountCcy !== currency && (
+                      {accountCcy !== costCcy && (
                         <Text style={s.pickerConverted}>
                           Deducts {fmt(costInAccountCcy, accountSymbol)} ({accountCcy})
                         </Text>
@@ -685,7 +727,9 @@ export default function Recurrings() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
+  embeddedContainer: { flex: undefined },
   scroll: { paddingHorizontal: 16, paddingTop: 6 },
+  embeddedScroll: { paddingHorizontal: 0, paddingTop: 0 },
 
   heroCard: { ...surface, borderRadius: 20, padding: 22, marginBottom: 14 },
   heroRow: {
@@ -702,6 +746,9 @@ const s = StyleSheet.create({
   },
   heroAmount: { fontSize: 30, fontWeight: '700', color: '#FFA94D' },
   heroPaid: { fontSize: 20, fontWeight: '700', color: '#00C896' },
+  completeHeroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 66 },
+  heroPaidComplete: { fontSize: 30, fontWeight: '700', color: '#00C896' },
+  completeCheck: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0D1F1A', borderWidth: 1, borderColor: '#1F3A30' },
   barTrack: {
     height: 6,
     borderRadius: 3,
@@ -837,6 +884,11 @@ const s = StyleSheet.create({
     borderColor: '#2C2C2C',
     fontWeight: '500',
   },
+  currencyGrid: { flexDirection: 'row', gap: 4, marginBottom: 16 },
+  currencyPill: { flex: 1, minWidth: 0, paddingHorizontal: 3, paddingVertical: 9, borderRadius: 10, backgroundColor: '#222', borderWidth: 1, borderColor: '#333', alignItems: 'center', justifyContent: 'center' },
+  currencyPillActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  currencyPillText: { color: '#999', fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  currencyPillTextActive: { color: '#07120F' },
   row2col: { flexDirection: 'row', gap: 12 },
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {

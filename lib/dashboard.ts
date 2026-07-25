@@ -26,6 +26,8 @@ export interface Cost {
   paidFromAccountId?: string | null;     // which account funded the payment
   paidMonth?: string | null;             // "YYYY-MM" — period start; auto-reset after intervalMonths
   paidAmount?: number | null;            // amount deducted from the funding account, in THAT account's currency; null when unpaid / paid without deducting / legacy row
+  /** ISO currency for this bill. Legacy rows fall back to the global currency. */
+  currency?: string;
 }
 
 // "YYYY-MM" key for the current calendar month.
@@ -74,7 +76,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       .order('position', { ascending: true }),
     supabase
       .from('costs')
-      .select('id, name, amount, paid, position, due_day, interval_months, due_month, paid_from_account_id, paid_month, paid_amount')
+      .select('id, name, amount, paid, position, due_day, interval_months, due_month, paid_from_account_id, paid_month, paid_amount, currency')
       .eq('user_id', uid)
       .order('position', { ascending: true }),
   ]);
@@ -101,6 +103,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       paidFromAccountId: r.paid_from_account_id,
       paidMonth: r.paid_month,
       paidAmount: r.paid_amount ?? null,
+      currency: r.currency ?? undefined,
     })),
   };
 
@@ -126,6 +129,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
           paid_from_account_id: c.paidFromAccountId ?? null,
           paid_month: c.paidMonth ?? null,
           paid_amount: c.paidAmount ?? null,
+          currency: c.currency ?? null,
         }),
       );
     }
@@ -209,6 +213,7 @@ export async function saveCost(cost: Cost): Promise<void> {
       paid_from_account_id: cost.paidFromAccountId ?? null,
       paid_month: cost.paidMonth ?? null,
       paid_amount: cost.paidAmount ?? null,
+      currency: cost.currency ?? null,
     }),
   );
 }

@@ -1,6 +1,5 @@
--- Debts: add manual payoff progress (paid_amount of amount), mirroring the
--- goals current_amount/target_amount model. Paste into the Supabase SQL
--- editor and run.
+-- Debts: add manual payoff progress (paid_amount of amount). Paste into the
+-- Supabase SQL editor and run.
 --
 -- This is an ADDITIVE COLUMN on the existing `debts` table — it inherits
 -- debts' existing RLS (debts_owner: FOR ALL auth.uid()=user_id), so no new
