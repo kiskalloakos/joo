@@ -614,7 +614,7 @@ export default function Projects() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
-  scroll: { paddingHorizontal: 16, paddingTop: 112 },
+  scroll: { paddingHorizontal: 16, paddingTop: 120 },
 
   headerRow: {
     flexDirection: 'row',

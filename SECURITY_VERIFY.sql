@@ -7,7 +7,7 @@
 -- whether every table the app writes to is actually protected in production
 -- (a migration file in the repo does NOT prove it ran here).
 --
--- PASS criteria — for ALL 10 active app tables:
+-- PASS criteria — for ALL 11 active app tables:
 --   Query 1: rls_enabled = true
 --   Query 2: exactly one policy, cmd = ALL, and BOTH qual and with_check are
 --            (auth.uid() = user_id)

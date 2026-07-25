@@ -222,10 +222,6 @@ export default function Debts() {
 
         {/* Debts list */}
         <View style={s.card}>
-          <View style={s.cardHeader}>
-            <Text style={s.cardTitle}>Outstanding</Text>
-          </View>
-
           {outstandingDebts.length === 0 ? (
             <TouchableOpacity style={s.empty} onPress={openAdd}>
               <Ionicons name="document-text-outline" size={26} color="#333" />
@@ -359,7 +355,7 @@ const s = StyleSheet.create({
     paddingVertical: 14,
   },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
-  scroll: { paddingHorizontal: 16, paddingTop: 112 },
+  scroll: { paddingHorizontal: 16, paddingTop: 120 },
 
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
   heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5, marginBottom: 10 },
@@ -409,7 +405,7 @@ const s = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 18,
     paddingVertical: 6,
   },
   rowDragging: { opacity: 0.35 },

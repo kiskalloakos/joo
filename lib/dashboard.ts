@@ -12,6 +12,8 @@ export interface Account {
   // ISO 4217 code (RON/USD/EUR/GBP/HUF/CHF). Undefined on legacy rows —
   // the dashboard treats undefined as "use the user's display currency."
   currency?: string;
+  /** Personal is the safe default for every existing account. */
+  accountType?: 'personal' | 'business';
 }
 
 export interface Cost {
@@ -28,6 +30,7 @@ export interface Cost {
   paidAmount?: number | null;            // amount deducted from the funding account, in THAT account's currency; null when unpaid / paid without deducting / legacy row
   /** ISO currency for this bill. Legacy rows fall back to the global currency. */
   currency?: string;
+  accountType?: 'personal' | 'business';
 }
 
 // "YYYY-MM" key for the current calendar month.
@@ -71,12 +74,12 @@ export async function refreshDashboard(): Promise<DashboardData> {
   const [accountsRes, costsRes] = await Promise.all([
     supabase
       .from('accounts')
-      .select('id, name, amount, position, currency')
+      .select('id, name, amount, position, currency, account_type')
       .eq('user_id', uid)
       .order('position', { ascending: true }),
     supabase
       .from('costs')
-      .select('id, name, amount, paid, position, due_day, interval_months, due_month, paid_from_account_id, paid_month, paid_amount, currency')
+      .select('id, name, amount, paid, position, due_day, interval_months, due_month, paid_from_account_id, paid_month, paid_amount, currency, account_type')
       .eq('user_id', uid)
       .order('position', { ascending: true }),
   ]);
@@ -90,6 +93,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       amount: String(r.amount),
       position: r.position,
       currency: r.currency ?? undefined,
+      accountType: r.account_type === 'business' ? 'business' : 'personal',
     })),
     costs: (costsRes.data ?? []).map((r) => ({
       id: r.id,
@@ -104,6 +108,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       paidMonth: r.paid_month,
       paidAmount: r.paid_amount ?? null,
       currency: r.currency ?? undefined,
+      accountType: r.account_type === 'business' ? 'business' : 'personal',
     })),
   };
 
@@ -130,6 +135,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
           paid_month: c.paidMonth ?? null,
           paid_amount: c.paidAmount ?? null,
           currency: c.currency ?? null,
+          account_type: c.accountType ?? 'personal',
         }),
       );
     }
@@ -176,6 +182,7 @@ export async function saveAccount(account: Account): Promise<void> {
       amount: parseAmount(account.amount),
       position: account.position,
       currency: account.currency ?? null,
+      account_type: account.accountType ?? 'personal',
     }),
   );
 }
@@ -214,6 +221,7 @@ export async function saveCost(cost: Cost): Promise<void> {
       paid_month: cost.paidMonth ?? null,
       paid_amount: cost.paidAmount ?? null,
       currency: cost.currency ?? null,
+      account_type: cost.accountType ?? 'personal',
     }),
   );
 }

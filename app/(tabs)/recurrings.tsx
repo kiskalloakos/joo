@@ -79,7 +79,19 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export default function Recurrings({ embedded = false }: { embedded?: boolean }) {
+type RecurringScope = 'personal' | 'business';
+
+export default function Recurrings({
+  embedded = false,
+  accountType = 'personal',
+  sectionTitle,
+  bottomSpacer = 40,
+}: {
+  embedded?: boolean;
+  accountType?: RecurringScope;
+  sectionTitle?: string;
+  bottomSpacer?: number;
+}) {
   const insets = useSafeAreaInsets();
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
@@ -130,6 +142,8 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
   const [formMode, setFormMode] = useState<FreqMode>('monthly');
   const [formCustomN, setFormCustomN] = useState('2');
   const [formDueMonth, setFormDueMonth] = useState(new Date().getMonth() + 1);
+  const [monthlyExpanded, setMonthlyExpanded] = useState(true);
+  const [periodicExpanded, setPeriodicExpanded] = useState(true);
 
   // The effective interval the form currently represents.
   const formInterval =
@@ -178,7 +192,7 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
           name: formName.trim(),
           amount: formAmount,
           paid: false,
-          position: costs.length,
+          position: costs.filter((item) => (accountType === 'business' ? item.accountType === 'business' : item.accountType !== 'business')).length,
           dueDay,
           intervalMonths,
           dueMonth,
@@ -186,6 +200,7 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
           paidMonth: null,
           paidAmount: null,
           currency: formCurrency,
+          accountType,
         };
     setCosts(
       editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost],
@@ -249,8 +264,11 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
       feedback.select();
       return;
     }
-    if (accounts.length === 0) {
-      Alert.alert('No accounts', 'Add a cash account first so you can pay this cost.');
+    const eligibleAccounts = accounts.filter((account) =>
+      accountType === 'business' ? account.accountType === 'business' : account.accountType !== 'business',
+    );
+    if (eligibleAccounts.length === 0) {
+      Alert.alert('No accounts', `Add a ${accountType} account first so you can pay this cost.`);
       return;
     }
     feedback.tap();
@@ -324,13 +342,23 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
   // Monthly costs drive the hero. Periodic (quarterly/yearly/custom) bills are
   // deliberately kept out of the monthly figure and surfaced separately so the
   // "left to pay this month" number stays honest.
-  const monthlyCosts = costs.filter((c) => (c.intervalMonths ?? 1) === 1);
-  const periodicCosts = costs.filter((c) => (c.intervalMonths ?? 1) !== 1);
+  const scopedCosts = costs.filter((cost) =>
+    accountType === 'business' ? cost.accountType === 'business' : cost.accountType !== 'business',
+  );
+  const scopedAccounts = accounts.filter((account) =>
+    accountType === 'business' ? account.accountType === 'business' : account.accountType !== 'business',
+  );
+  const monthlyCosts = scopedCosts.filter((c) => (c.intervalMonths ?? 1) === 1);
+  const periodicCosts = scopedCosts.filter((c) => (c.intervalMonths ?? 1) !== 1);
 
   const total = monthlyCosts.reduce((sum, c) => sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates), 0);
   const paid = monthlyCosts.reduce((sum, c) => (c.paid ? sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates) : sum), 0);
   const left = Math.max(0, total - paid);
   const pct = total > 0 ? Math.min(1, paid / total) : 0;
+  const currentLiquidity = scopedAccounts.reduce(
+    (sum, account) => sum + convert(parseAmt(account.amount), account.currency ?? currency, currency, rates.rates),
+    0,
+  );
 
   // Unpaid bills always lead the list. Within each paid/unpaid group, preserve
   // the natural due-date order so the next thing to pay is still first.
@@ -390,28 +418,15 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
         showsVerticalScrollIndicator={false}
         scrollEnabled={!embedded}
       >
-        {/* Hero — paid / left this month */}
-        <View style={s.heroCard}>
-          {left === 0 && total > 0 ? (
-            <View style={s.completeHeroRow}>
-              <View>
-                <Text style={s.heroLabel}>PAID SO FAR</Text>
-                <Text style={[s.heroPaidComplete, glowGreen]}>{fmt(paid, symbol)}</Text>
-              </View>
-              <View style={s.completeCheck}><Ionicons name="checkmark" size={25} color="#00C896" style={glowGreen} /></View>
-            </View>
-          ) : (
-            <View style={s.heroRow}>
-              <View>
-                <Text style={s.heroLabel}>LEFT TO PAY</Text>
-                <Text style={[s.heroAmount, glowAmber]}>{fmt(left, symbol)}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={s.heroLabel}>PAID SO FAR</Text>
-                <Text style={[s.heroPaid, glowGreen]}>{fmt(paid, symbol)}</Text>
-              </View>
-            </View>
-          )}
+        {!embedded && <View style={s.heroCard}>
+          <Text style={s.heroLabel}>CURRENT LIQUIDITY</Text>
+          <Text style={[s.heroLiquidityAmount, glowGreen]}>{fmt(currentLiquidity, symbol)}</Text>
+          <View style={s.progressHeader}>
+            <Text style={s.progressLabel}>MONTHLY PAYMENTS</Text>
+            <Text style={[s.progressValue, left === 0 && total > 0 && s.progressValueComplete]}>
+              {left === 0 && total > 0 ? 'Covered' : `${fmt(paid, symbol)} of ${fmt(total, symbol)}`}
+            </Text>
+          </View>
           <View
             style={s.barTrack}
             onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
@@ -425,50 +440,55 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
               />
             </View>
           </View>
-          {left > 0 && (
-            <Text style={s.heroSub}>
-              {fmt(total, symbol)} monthly · {monthlyCosts.length}{' '}
-              {monthlyCosts.length === 1 ? 'recurring' : 'recurrings'}
-            </Text>
-          )}
-        </View>
+          <View style={s.progressFooter}>
+            {left === 0 && total > 0 ? <><Ionicons name="checkmark-circle" size={15} color="#00C896" style={glowGreen} /><Text style={[s.progressStatus, glowGreen]}>All monthly costs are covered</Text></> : <Text style={s.progressStatus}>{fmt(left, symbol)} left across {monthlyCosts.length} {monthlyCosts.length === 1 ? 'bill' : 'bills'}</Text>}
+          </View>
+        </View>}
+
+        {sectionTitle && <Text style={s.embeddedSectionTitle}>{sectionTitle}</Text>}
 
         {/* Monthly */}
         <View style={s.card}>
-          <View style={s.cardHeader}>
-            <Text style={s.cardTitle}>Monthly</Text>
-          </View>
+          <TouchableOpacity style={s.cardHeader} onPress={() => setMonthlyExpanded((value) => !value)} activeOpacity={0.7}>
+            <View>
+              <Text style={s.cardTitle}>{accountType === 'business' ? 'Monthly payments' : 'Monthly'}</Text>
+              <Text style={s.cardSub}>{fmt(total, symbol)}/mo · {monthlyCosts.length} {monthlyCosts.length === 1 ? 'bill' : 'bills'}</Text>
+            </View>
+            <Ionicons name={monthlyExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#555" />
+          </TouchableOpacity>
 
-          {sorted.length === 0 ? (
+          {monthlyExpanded && (sorted.length === 0 ? (
             <TouchableOpacity style={s.empty} onPress={openAdd}>
               <Ionicons name="repeat-outline" size={26} color="#333" />
-              <Text style={s.emptyText}>No monthly costs yet</Text>
-              <Text style={s.emptyHint}>Tap to add your first recurring cost.</Text>
+              <Text style={s.emptyText}>No monthly {accountType === 'business' ? 'payments' : 'costs'} yet</Text>
+              <Text style={s.emptyHint}>Tap to add your first recurring {accountType === 'business' ? 'payment' : 'cost'}.</Text>
             </TouchableOpacity>
           ) : (
             <>
               {sorted.map((c, i) => renderCostRow(c, i, `Due ${ordinal(c.dueDay ?? 1)}`))}
               <TouchableOpacity style={s.addCostRow} onPress={openAdd}>
                 <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
-                <Text style={[s.addCostText, glowGreen]}>Add Recurring</Text>
+                <Text style={[s.addCostText, glowGreen]}>Add {accountType === 'business' ? 'Payment' : 'Recurring'}</Text>
               </TouchableOpacity>
             </>
-          )}
+          ))}
         </View>
 
         {/* Periodic — quarterly / yearly / custom. Annualized headline; NOT
             folded into the monthly figure above. */}
         {periodicCosts.length > 0 && (
           <View style={[s.card, { marginTop: 14 }]}>
-            <View style={s.cardHeader}>
+            <TouchableOpacity style={s.cardHeader} onPress={() => setPeriodicExpanded((value) => !value)} activeOpacity={0.7}>
               <View>
-                <Text style={s.cardTitle}>Periodic</Text>
+                <Text style={s.cardTitle}>{accountType === 'business' ? 'Periodic payments' : 'Periodic'}</Text>
                 <Text style={s.cardSub}>
                   {fmt(annualPeriodic, symbol)}/yr · {periodicCosts.length}{' '}
                   {periodicCosts.length === 1 ? 'bill' : 'bills'}
                 </Text>
               </View>
-            </View>
+              <Ionicons name={periodicExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#555" />
+            </TouchableOpacity>
+            {periodicExpanded && <>
             {periodicSorted.map(({ c, due }, i) =>
               renderCostRow(
                 c,
@@ -482,12 +502,13 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
             )}
             <TouchableOpacity style={s.addCostRow} onPress={openAdd}>
               <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
-              <Text style={[s.addCostText, glowGreen]}>Add Periodic</Text>
+              <Text style={[s.addCostText, glowGreen]}>Add Periodic {accountType === 'business' ? 'Payment' : ''}</Text>
             </TouchableOpacity>
+            </>}
           </View>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: bottomSpacer }} />
       </ScrollView>
 
       <Modal visible={costModal.visible} transparent animationType="slide">
@@ -498,7 +519,7 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
           <View style={s.overlay}>
             <View style={s.sheet}>
               <Text style={s.sheetTitle}>
-                {costModal.editing ? 'Edit Cost' : 'Add Recurring Cost'}
+                {costModal.editing ? `Edit ${accountType === 'business' ? 'Payment' : 'Cost'}` : `Add Recurring ${accountType === 'business' ? 'Payment' : 'Cost'}`}
               </Text>
               <ScrollView
                 style={{ flexShrink: 1 }}
@@ -683,7 +704,7 @@ export default function Recurrings({ embedded = false }: { embedded?: boolean })
                 </View>
                 <Ionicons name="checkmark-circle-outline" size={18} color="#666" />
               </TouchableOpacity>
-              {accountPicker.cost && accounts.map((account, i) => {
+              {accountPicker.cost && scopedAccounts.map((account, i) => {
                 // Each account renders in its OWN currency. The cost (in the
                 // page's display currency) is converted into that currency
                 // before the balance preview and the actual deduction.
@@ -730,13 +751,9 @@ const s = StyleSheet.create({
   embeddedContainer: { flex: undefined },
   scroll: { paddingHorizontal: 16, paddingTop: 6 },
   embeddedScroll: { paddingHorizontal: 0, paddingTop: 0 },
+  embeddedSectionTitle: { color: '#777', fontSize: 11, fontWeight: '700', letterSpacing: 1.4, marginBottom: 10, marginTop: 6 },
 
   heroCard: { ...surface, borderRadius: 20, padding: 22, marginBottom: 14 },
-  heroRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
   heroLabel: {
     fontSize: 10,
     fontWeight: '600',
@@ -744,20 +761,21 @@ const s = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 4,
   },
-  heroAmount: { fontSize: 30, fontWeight: '700', color: '#FFA94D' },
-  heroPaid: { fontSize: 20, fontWeight: '700', color: '#00C896' },
-  completeHeroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 66 },
-  heroPaidComplete: { fontSize: 30, fontWeight: '700', color: '#00C896' },
-  completeCheck: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0D1F1A', borderWidth: 1, borderColor: '#1F3A30' },
+  heroLiquidityAmount: { fontSize: 38, fontWeight: '800', color: '#00C896', letterSpacing: -1, fontVariant: ['tabular-nums'] },
+  progressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22 },
+  progressLabel: { fontSize: 10, fontWeight: '700', color: '#666', letterSpacing: 1.2 },
+  progressValue: { fontSize: 12, color: '#999', fontWeight: '600', fontVariant: ['tabular-nums'] },
+  progressValueComplete: { color: '#00C896' },
   barTrack: {
     height: 6,
     borderRadius: 3,
     backgroundColor: '#1E1E1E',
-    marginTop: 18,
+    marginTop: 9,
     overflow: 'hidden',
   },
   barClip: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  heroSub: { fontSize: 12, color: '#666', marginTop: 10 },
+  progressFooter: { minHeight: 18, flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 9 },
+  progressStatus: { fontSize: 12, color: '#777', fontWeight: '500' },
 
   card: { ...surface, borderRadius: 20, overflow: 'hidden' },
   cardHeader: {

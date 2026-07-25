@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { triggerHomeMoneyAction } from '../../lib/homeHeaderActions';
 import { triggerProjectsHeaderAction } from '../../lib/projectsHeaderActions';
-import { triggerRevenueHeaderAction } from '../../lib/revenueHeaderActions';
+import { triggerBusinessHeaderAction } from '../../lib/businessHeaderActions';
 import { getTabVisibility, peekTabVisibility, subscribeTabVisibility, type TabVisibility } from '../../lib/tabVisibility';
 
 export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const isHome = pathname === '/' || pathname === '/index';
-  const isRevenue = pathname === '/revenue';
+  const isBusiness = pathname === '/business';
   const isProjects = pathname === '/projects';
   const [visibility, setVisibility] = useState<TabVisibility>(peekTabVisibility);
   useEffect(() => {
@@ -43,6 +43,10 @@ export default function TabLayout() {
           <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
           <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="business" disableAutomaticContentInsets hidden={!visibility.business}>
+          <NativeTabs.Trigger.Icon sf="briefcase" md="business_center" />
+          <NativeTabs.Trigger.Label>Business</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="investments" disableAutomaticContentInsets hidden={!visibility.wealth}>
           <NativeTabs.Trigger.Icon sf="chart.line.uptrend.xyaxis" md="trending_up" />
           <NativeTabs.Trigger.Label>Wealth</NativeTabs.Trigger.Label>
@@ -50,10 +54,6 @@ export default function TabLayout() {
         <NativeTabs.Trigger name="debts" disableAutomaticContentInsets hidden={!visibility.debts}>
           <NativeTabs.Trigger.Icon sf="creditcard" md="credit_card" />
           <NativeTabs.Trigger.Label>Debts</NativeTabs.Trigger.Label>
-        </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="revenue" disableAutomaticContentInsets hidden={!visibility.revenue}>
-          <NativeTabs.Trigger.Icon sf="arrow.down.circle" md="arrow_downward" />
-          <NativeTabs.Trigger.Label>Revenue</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="projects" disableAutomaticContentInsets hidden={!visibility.projects}>
           <NativeTabs.Trigger.Icon sf="hammer" md="construction" />
@@ -75,9 +75,9 @@ export default function TabLayout() {
           />
         </Stack.Toolbar>
       )}
-      {isRevenue && (
+      {isBusiness && (
         <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button icon="plus" onPress={triggerRevenueHeaderAction} />
+          <Stack.Toolbar.Button icon="plus" onPress={triggerBusinessHeaderAction} />
         </Stack.Toolbar>
       )}
       {isProjects && (

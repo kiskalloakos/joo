@@ -434,7 +434,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   header: { paddingHorizontal: 20, paddingVertical: 14 },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
-  scroll: { paddingHorizontal: 16, paddingTop: 112 },
+  scroll: { paddingHorizontal: 16, paddingTop: 120 },
   wealthControlRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
   wealthControlLabel: { fontSize: 11, fontWeight: '700', color: '#666', letterSpacing: 1.5 },
   customizeButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 9, borderRadius: 12, backgroundColor: '#0D1F1A', borderWidth: 1, borderColor: '#1F3A30' },

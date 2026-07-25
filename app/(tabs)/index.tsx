@@ -13,6 +13,7 @@ import {
 import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage, peekCurrencySettings } from '../../lib/currency';
 import { CURRENCIES } from '../../lib/currencies';
 import {
@@ -129,6 +130,7 @@ export default function Dashboard() {
   const [formCurrency, setFormCurrency] = useState<string>(
     () => peekCurrencySettings().global,
   );
+  const [formAccountType, setFormAccountType] = useState<'personal' | 'business'>('personal');
 
   const closeMoneyModal = useCallback(() => {
     setMoneyModal((prev) => ({ ...prev, visible: false }));
@@ -195,32 +197,36 @@ export default function Dashboard() {
   );
 
   // ── Math ──────────────────────────────────────────────────────────────────
-  // `currency` is the global display/default currency. Cash accounts may now carry their own currency; we
-  // bucket them per currency, then convert each bucket into the display
-  // currency for the hero `totalLiquid`. Accounts with no per-row currency
-  // are treated as the display currency (no conversion).
-  const liquidByCcy = accounts.reduce<Record<string, number>>((acc, a) => {
-    const ccy = a.currency ?? currency;
-    acc[ccy] = (acc[ccy] ?? 0) + parseAmt(a.amount);
-    return acc;
-  }, {});
-  const totalLiquid = Object.entries(liquidByCcy).reduce(
-    (s, [ccy, amt]) => s + convert(amt, ccy, currency, rates.rates),
-    0,
-  );
   // Cash accounts are a read-only list now, so make the most useful order
   // automatic: highest balance first. The stored position remains intact.
   const sortedAccounts = [...accounts].sort(
     (a, b) => parseAmt(b.amount) - parseAmt(a.amount),
   );
+  const personalAccounts = sortedAccounts.filter((account) => account.accountType !== 'business');
+  const businessAccounts = sortedAccounts.filter((account) => account.accountType === 'business');
+  const hasAccountGroups = personalAccounts.length > 0 && businessAccounts.length > 0;
+  // Home is deliberately personal-only. Business account cash belongs to the
+  // Business page and must never inflate the user's available personal money.
+  const personalLiquid = personalAccounts.reduce(
+    (sum, account) => sum + convert(parseAmt(account.amount), account.currency ?? currency, currency, rates.rates),
+    0,
+  );
   // Monthly costs only — periodic (quarterly/yearly) bills are kept out of the
   // dashboard figure on purpose and live in Recurrings' separate section.
-  const monthlyCosts = costs.filter((c) => (c.intervalMonths ?? 1) === 1);
+  const monthlyCosts = costs.filter(
+    (cost) => cost.accountType !== 'business' && (cost.intervalMonths ?? 1) === 1,
+  );
   const unpaidCosts = monthlyCosts.reduce(
     (s, c) => c.paid ? s : s + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates),
     0,
   );
-  const afterPayments = totalLiquid - unpaidCosts;
+  const monthlyCostTotal = monthlyCosts.reduce(
+    (sum, c) => sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates),
+    0,
+  );
+  const monthlyPaid = Math.max(0, monthlyCostTotal - unpaidCosts);
+  const monthlyProgress = monthlyCostTotal > 0 ? Math.min(1, monthlyPaid / monthlyCostTotal) : 0;
+  const afterPayments = personalLiquid - unpaidCosts;
   const showAfterPayments = tabVisibility.recurrings && unpaidCosts > 0;
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
   const symbolFor = (code: string) =>
@@ -233,6 +239,7 @@ export default function Dashboard() {
     // New accounts default to the user's global currency. They can override
     // per-account in the picker below.
     setFormCurrency(peekCurrencySettings().global);
+    setFormAccountType('personal');
     setAccountModal({ visible: true, editing: null });
   };
 
@@ -240,6 +247,7 @@ export default function Dashboard() {
     setFormName(account.name);
     setFormAmount(account.amount);
     setFormCurrency(account.currency ?? peekCurrencySettings().global);
+    setFormAccountType(account.accountType ?? 'personal');
     setAccountModal({ visible: true, editing: account });
   };
 
@@ -247,13 +255,14 @@ export default function Dashboard() {
     if (!formName.trim()) return;
     const editing = accountModal.editing;
     const account: Account = editing
-      ? { ...editing, name: formName.trim(), amount: formAmount, currency: formCurrency }
+      ? { ...editing, name: formName.trim(), amount: formAmount, currency: formCurrency, accountType: formAccountType }
       : {
           id: newId(),
           name: formName.trim(),
           amount: formAmount,
           position: accounts.length,
           currency: formCurrency,
+          accountType: formAccountType,
         };
     setAccounts(
       editing ? accounts.map((a) => (a.id === editing.id ? account : a)) : [...accounts, account],
@@ -429,25 +438,41 @@ export default function Dashboard() {
 
         {/* Hero */}
         <TouchableOpacity style={s.heroCard} onPress={openHistory} activeOpacity={0.85}>
-          {showAfterPayments ? (
-            <>
-              <View style={s.heroTopRow}>
-                <Text style={s.heroLabel}>AFTER MONTHLY PAYMENTS</Text>
-                <Ionicons name="chevron-forward" size={18} color="#555" />
+          {showAfterPayments ? <>
+            <Text style={s.heroLabel}>AFTER MONTHLY PAYMENTS</Text>
+            <Text style={s.heroAmount}>{fmt(afterPayments, symbol)}</Text>
+            <View style={s.heroDivider} />
+            <View style={s.heroRow}>
+              <Text style={s.heroSubLabel}>Current liquidity</Text>
+              <Text style={s.heroSubValue}>{fmt(personalLiquid, symbol)}</Text>
+            </View>
+          </> : <>
+            <Text style={s.heroLabel}>CURRENT LIQUIDITY</Text>
+            <Text style={s.heroAmount}>{fmt(personalLiquid, symbol)}</Text>
+          </>}
+          {tabVisibility.recurrings && monthlyCostTotal > 0 && <>
+            <View style={s.paymentProgressHeader}>
+              <Text style={s.paymentProgressLabel}>MONTHLY PAYMENTS</Text>
+            </View>
+            <View style={[s.paymentTrack, unpaidCosts === 0 && s.paymentTrackComplete]}>
+              <LinearGradient
+                colors={['#291E18', '#15382E']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={s.paymentTrackTint}
+              />
+              <View style={[s.paymentClip, { width: `${monthlyProgress * 100}%` }]}>
+                <LinearGradient colors={['#FFA94D', '#E8C868', '#00C896']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.paymentFill}>
+                  <View style={s.paymentGloss} />
+                </LinearGradient>
               </View>
-              <Text style={s.heroAmount}>{fmt(afterPayments, symbol)}</Text>
-              <View style={s.heroDivider} />
-              <View style={s.heroRow}>
-                <Text style={s.heroSubLabel}>Current liquidity</Text>
-                <Text style={s.heroSubValue}>{fmt(totalLiquid, symbol)}</Text>
+              <View style={[s.paymentMarker, unpaidCosts === 0 && s.paymentMarkerComplete, { left: `${unpaidCosts === 0 ? 95 : Math.min(98, Math.max(2, monthlyProgress * 100))}%` }]}>
+                {unpaidCosts === 0
+                  ? <Ionicons name="checkmark" size={19} color="#07120F" />
+                  : <View style={s.paymentMarkerCore} />}
               </View>
-            </>
-          ) : (
-            <>
-              <Text style={s.heroLabel}>CURRENT LIQUIDITY</Text>
-              <Text style={s.heroAmount}>{fmt(totalLiquid, symbol)}</Text>
-            </>
-          )}
+            </View>
+          </>}
         </TouchableOpacity>
 
         {/* Accounts — always a flat list; rows show their own currency
@@ -455,7 +480,7 @@ export default function Dashboard() {
             per-currency breakdown moved up into the hero card. */}
         <View style={s.card}>
           <View style={s.cardHeader}>
-            <Text style={s.cardTitle}>Cash Accounts</Text>
+            <Text style={s.cardTitle}>Money</Text>
           </View>
 
           {accounts.length === 0 ? (
@@ -465,12 +490,18 @@ export default function Dashboard() {
             </TouchableOpacity>
           ) : (
             <>
-              {sortedAccounts.map((account) => (
+              {hasAccountGroups && <Text style={s.accountGroupLabel}>PERSONAL</Text>}
+              {personalAccounts.map((account) => (
                 <TouchableOpacity key={account.id} style={s.rowBody} onPress={() => openEditAccount(account)} activeOpacity={0.2}>
                   <Text style={s.rowLabel}>{account.name}</Text>
-                  <View style={s.rowRight}>
-                    <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbolFor(account.currency ?? currency))}</Text>
-                  </View>
+                  <View style={s.rowRight}><Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbolFor(account.currency ?? currency))}</Text></View>
+                </TouchableOpacity>
+              ))}
+              {hasAccountGroups && <Text style={s.accountGroupLabel}>BUSINESS</Text>}
+              {businessAccounts.map((account) => (
+                <TouchableOpacity key={account.id} style={s.rowBody} onPress={() => openEditAccount(account)} activeOpacity={0.2}>
+                  <Text style={s.rowLabel}>{account.name}</Text>
+                  <View style={s.rowRight}><Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbolFor(account.currency ?? currency))}</Text></View>
                 </TouchableOpacity>
               ))}
               <TouchableOpacity style={s.addCostRow} onPress={openAddAccount}>
@@ -481,7 +512,7 @@ export default function Dashboard() {
           )}
         </View>
 
-        {tabVisibility.recurrings && <Recurrings embedded />}
+        {tabVisibility.recurrings && <Recurrings embedded bottomSpacer={150} />}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -533,6 +564,15 @@ export default function Dashboard() {
                     >
                       {c.symbol} {c.code}
                     </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={s.inputLabel}>Account type</Text>
+              <View style={s.accountTypePicker}>
+                {(['personal', 'business'] as const).map((type) => (
+                  <TouchableOpacity key={type} style={[s.accountTypeOption, formAccountType === type && s.accountTypeOptionActive]} onPress={() => setFormAccountType(type)}>
+                    <Ionicons name={type === 'personal' ? 'person-outline' : 'briefcase-outline'} size={15} color={formAccountType === type ? '#07120F' : '#999'} />
+                    <Text style={[s.accountTypeText, formAccountType === type && s.accountTypeTextActive]}>{type === 'personal' ? 'Personal' : 'Business'}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -819,7 +859,7 @@ const s = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  scroll: { paddingHorizontal: 16, paddingTop: 112 },
+  scroll: { paddingHorizontal: 16, paddingTop: 120 },
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5 },
@@ -837,6 +877,17 @@ const s = StyleSheet.create({
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroSubLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
   heroSubValue: { fontSize: 17, fontWeight: '700', color: '#AAA', fontVariant: ['tabular-nums'] },
+  paymentProgressHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 22 },
+  paymentProgressLabel: { fontSize: 10, fontWeight: '700', color: '#666', letterSpacing: 1.2 },
+  paymentTrack: { height: 10, borderRadius: 5, overflow: 'visible', marginTop: 10, justifyContent: 'center' },
+  paymentTrackComplete: { shadowColor: '#00C896', shadowOpacity: 0.45, shadowRadius: 9, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
+  paymentTrackTint: { ...StyleSheet.absoluteFill, borderRadius: 5, borderWidth: 1, borderColor: '#2B2B2B' },
+  paymentClip: { height: 10, borderRadius: 5, overflow: 'hidden' },
+  paymentFill: { height: 10, width: '100%', justifyContent: 'flex-start' },
+  paymentGloss: { height: 3, width: '100%', backgroundColor: 'rgba(255,255,255,0.26)', borderTopLeftRadius: 5, borderTopRightRadius: 5 },
+  paymentMarker: { position: 'absolute', width: 16, height: 16, marginLeft: -8, borderRadius: 8, backgroundColor: '#111', borderWidth: 2, borderColor: '#9CE8CA', alignItems: 'center', justifyContent: 'center', shadowColor: '#00C896', shadowOpacity: 0.55, shadowRadius: 7, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
+  paymentMarkerComplete: { width: 30, height: 30, marginLeft: -15, borderRadius: 15, backgroundColor: '#00C896', borderColor: '#B9F7DD', shadowOpacity: 0.8, shadowRadius: 12, elevation: 8 },
+  paymentMarkerCore: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#00C896' },
 
   card: { ...surface, borderRadius: 16, marginBottom: 16, overflow: 'hidden' },
   cardHeader: {
@@ -846,6 +897,7 @@ const s = StyleSheet.create({
     padding: 18,
   },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
+  accountGroupLabel: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 7, borderTopWidth: 1, borderTopColor: '#1C1C1C', fontSize: 10, fontWeight: '700', color: '#666', letterSpacing: 1.2 },
   cardSubtitle: { fontSize: 12, color: '#555', marginTop: 3, fontWeight: '500', fontVariant: ['tabular-nums'] },
   row: {
     flexDirection: 'row',
@@ -860,7 +912,7 @@ const s = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 18,
     paddingVertical: 6,
   },
   costRow: {
@@ -1037,6 +1089,11 @@ const s = StyleSheet.create({
   ccyPillActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
   ccyPillText: { fontSize: 11, color: '#999', fontWeight: '600', textAlign: 'center' },
   ccyPillTextActive: { color: '#07120F' },
+  accountTypePicker: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  accountTypeOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 11, borderRadius: 10, backgroundColor: '#222', borderWidth: 1, borderColor: '#333' },
+  accountTypeOptionActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  accountTypeText: { color: '#999', fontSize: 13, fontWeight: '600' },
+  accountTypeTextActive: { color: '#07120F' },
 
   // Per-currency breakdown rendered INSIDE the hero card when the user has
   // multiple currencies AND the Settings toggle is on. Hero stays compact

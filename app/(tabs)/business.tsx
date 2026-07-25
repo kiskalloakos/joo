@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -36,7 +36,10 @@ import { showToast } from '../../lib/toast';
 import { glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { parseAmount } from '../../lib/finance';
-import { registerRevenueHeaderAction } from '../../lib/revenueHeaderActions';
+import { registerBusinessHeaderAction } from '../../lib/businessHeaderActions';
+import { convert, peekRates, subscribeRates, type Rates } from '../../lib/exchangeRates';
+import { Account, getDashboard, peekDashboard, refreshDashboard } from '../../lib/dashboard';
+import Recurrings from './recurrings';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const YEAR_PICKER_RANGE = 30; // years back from current calendar year
@@ -45,11 +48,11 @@ function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-export default function Revenue() {
+export default function Business() {
   const [state, setState] = useState<RevenueState | null>(peekRevenue);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('revenue'));
   const [editVisible, setEditVisible] = useState(false);
-  const [monthInputs, setMonthInputs] = useState<{ id: string; name: string; amount: string }[][]>(
+  const [monthInputs, setMonthInputs] = useState<{ id: string; name: string; amount: string; currency: string }[][]>(
     Array.from({ length: 12 }, () => []),
   );
 
@@ -65,6 +68,16 @@ export default function Revenue() {
   const [quickSource, setQuickSource] = useState('');
   const [quickAmount, setQuickAmount] = useState('');
   const [quickCurrency, setQuickCurrency] = useState(() => peekCurrencyForPage('revenue'));
+  const [rates, setRates] = useState<Rates>(() => peekRates());
+  const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
+  const [monthlyIncomeModal, setMonthlyIncomeModal] = useState<{ visible: boolean; monthIndex: number }>({ visible: false, monthIndex: 0 });
+  const [monthlySource, setMonthlySource] = useState('');
+  const [monthlyAmount, setMonthlyAmount] = useState('');
+  const [monthlyCurrency, setMonthlyCurrency] = useState(() => peekCurrencyForPage('revenue'));
+  const [incomeCurrencyPicker, setIncomeCurrencyPicker] = useState<{ visible: boolean; monthIndex: number; incomeId: string }>({ visible: false, monthIndex: 0, incomeId: '' });
+  const [incomeCurrencyDraft, setIncomeCurrencyDraft] = useState(() => peekCurrencyForPage('revenue'));
+
+  useEffect(() => subscribeRates(setRates), []);
 
   useFocusEffect(
     useCallback(() => {
@@ -81,6 +94,8 @@ export default function Revenue() {
       refreshCurrencyForPage('revenue').then((c) => {
         if (!cancelled) setCurrency(c);
       });
+      getDashboard().then((d) => { if (!cancelled) setAccounts(d.accounts); });
+      refreshDashboard().then((d) => { if (!cancelled) setAccounts(d.accounts); });
       return () => {
         cancelled = true;
       };
@@ -92,16 +107,31 @@ export default function Revenue() {
   }
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
+  const businessAccounts = accounts.filter((account) => account.accountType === 'business');
+  const businessCash = businessAccounts.reduce(
+    (sum, account) => sum + convert(parseAmount(account.amount), account.currency ?? currency, currency, rates.rates),
+    0,
+  );
+  const displayMonthTotals = (months?: RevenueIncome[][]) =>
+    Array.from({ length: 12 }, (_, index) =>
+      (months?.[index] ?? []).reduce(
+        (sum, income) => sum + convert(income.amount, income.currency ?? currency, currency, rates.rates),
+        0,
+      ),
+    );
+  const displayEntryAmount = (entry: RevenueEntry | null) =>
+    entry?.months ? displayMonthTotals(entry.months).reduce((sum, value) => sum + value, 0) : entry?.amount ?? 0;
   const current = currentEntry(state);
   const currentLabel = current?.label ?? String(new Date().getFullYear());
-  const currentAmount = current?.amount ?? 0;
-  const currentMonths = monthTotals(current?.months);
+  const currentAmount = displayEntryAmount(current);
+  const currentMonths = displayMonthTotals(current?.months);
   const prev = previousEntry(state);
-  const total = allTimeTotal(state.entries);
+  const total = state.entries.reduce((sum, entry) => sum + displayEntryAmount(entry), 0);
 
   let growthPct: number | null = null;
-  if (prev && prev.amount > 0) {
-    growthPct = ((currentAmount - prev.amount) / prev.amount) * 100;
+  const previousAmount = displayEntryAmount(prev);
+  if (prev && previousAmount > 0) {
+    growthPct = ((currentAmount - previousAmount) / previousAmount) * 100;
   }
 
   // Monthly average — prefer count of months with actual data, fall back to /12.
@@ -131,6 +161,7 @@ export default function Revenue() {
         id: income.id,
         name: income.name,
         amount: income.amount > 0 ? String(income.amount) : '',
+        currency: income.currency ?? currency,
       })),
     );
     setMonthInputs(seed);
@@ -145,7 +176,7 @@ export default function Revenue() {
     setQuickAddVisible(true);
   }, [currency]);
 
-  useFocusEffect(useCallback(() => registerRevenueHeaderAction(openQuickAdd), [openQuickAdd]));
+  useFocusEffect(useCallback(() => registerBusinessHeaderAction(openQuickAdd), [openQuickAdd]));
 
   const saveQuickRevenue = async () => {
     if (!current || !quickSource.trim() || !(parseAmount(quickAmount) > 0)) return;
@@ -162,7 +193,7 @@ export default function Revenue() {
     await saveRevenue(updated);
   };
 
-  const updateIncome = (monthIndex: number, incomeId: string, key: 'name' | 'amount', value: string) => {
+  const updateIncome = (monthIndex: number, incomeId: string, key: 'name' | 'amount' | 'currency', value: string) => {
     setMonthInputs((previous) =>
       previous.map((month, index) =>
         index === monthIndex
@@ -172,12 +203,50 @@ export default function Revenue() {
     );
   };
 
-  const addIncome = (monthIndex: number) => {
+  const openMonthlyIncome = (monthIndex: number) => {
+    setMonthlySource('');
+    setMonthlyAmount('');
+    setMonthlyCurrency(currency);
+    // iOS presents one native modal at a time. Close the month editor first,
+    // then present the add sheet so the tap never appears to do nothing.
+    setEditVisible(false);
+    setTimeout(() => setMonthlyIncomeModal({ visible: true, monthIndex }), 180);
+  };
+
+  const openIncomeCurrencyPicker = (monthIndex: number, incomeId: string) => {
+    const income = monthInputs[monthIndex]?.find((item) => item.id === incomeId);
+    setIncomeCurrencyDraft(income?.currency ?? currency);
+    setEditVisible(false);
+    setTimeout(() => setIncomeCurrencyPicker({ visible: true, monthIndex, incomeId }), 180);
+  };
+
+  const saveMonthlyIncome = () => {
+    if (!monthlySource.trim() || !(parseAmount(monthlyAmount) > 0)) return;
+    const monthIndex = monthlyIncomeModal.monthIndex;
     setMonthInputs((previous) =>
       previous.map((month, index) =>
-        index === monthIndex ? [...month, { id: newId(), name: '', amount: '' }] : month,
+        index === monthIndex ? [...month, { id: newId(), name: monthlySource.trim(), amount: monthlyAmount, currency: monthlyCurrency }] : month,
       ),
     );
+    setMonthlyIncomeModal((value) => ({ ...value, visible: false }));
+    setTimeout(() => setEditVisible(true), 180);
+  };
+
+  const closeMonthlyIncome = () => {
+    setMonthlyIncomeModal((value) => ({ ...value, visible: false }));
+    setTimeout(() => setEditVisible(true), 180);
+  };
+
+  const confirmIncomeCurrency = () => {
+    const { monthIndex, incomeId } = incomeCurrencyPicker;
+    updateIncome(monthIndex, incomeId, 'currency', incomeCurrencyDraft);
+    setIncomeCurrencyPicker((value) => ({ ...value, visible: false }));
+    setTimeout(() => setEditVisible(true), 180);
+  };
+
+  const closeIncomeCurrencyPicker = () => {
+    setIncomeCurrencyPicker((value) => ({ ...value, visible: false }));
+    setTimeout(() => setEditVisible(true), 180);
   };
 
   const removeIncome = (monthIndex: number, incomeId: string) => {
@@ -187,7 +256,7 @@ export default function Revenue() {
   };
 
   const liveTotal = monthInputs.reduce(
-    (sum, month) => sum + month.reduce((monthSum, income) => monthSum + (parseAmount(income.amount) || 0), 0),
+    (sum, month) => sum + month.reduce((monthSum, income) => monthSum + convert(parseAmount(income.amount) || 0, income.currency ?? currency, currency, rates.rates), 0),
     0,
   );
 
@@ -199,6 +268,7 @@ export default function Revenue() {
           id: income.id,
           name: income.name.trim() || 'Income',
           amount: parseAmount(income.amount) || 0,
+          currency: income.currency,
         }))
         .filter((income) => income.amount > 0),
     );
@@ -324,6 +394,26 @@ export default function Revenue() {
     <View style={s.container} collapsable={false}>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <View style={s.businessSummary}>
+          <View style={s.businessSummaryTop}>
+            <Text style={s.heroYear}>BUSINESS CASH</Text>
+            <Text style={s.heroAmount}>{fmt(businessCash, symbol)}</Text>
+          </View>
+          <View style={s.businessSummaryDivider} />
+          {businessAccounts.length === 0 ? (
+            <Text style={s.businessEmpty}>No business accounts yet.</Text>
+          ) : businessAccounts.map((account, index) => {
+            const accountCurrency = account.currency ?? currency;
+            const accountSymbol = CURRENCIES.find((item) => item.code === accountCurrency)?.symbol ?? `${accountCurrency} `;
+            return (
+              <View key={account.id} style={[s.businessAccountRow, index > 0 && s.businessAccountDivider, index === businessAccounts.length - 1 && s.businessAccountLast]}>
+                <Text style={s.businessAccountName}>{account.name}</Text>
+                <Text style={s.businessAccountAmount}>{fmt(parseAmount(account.amount), accountSymbol)}</Text>
+              </View>
+            );
+          })}
+        </View>
+
         {/* New-year reminder banner */}
         {showNewYearBanner && (
           <View style={s.banner}>
@@ -376,10 +466,6 @@ export default function Revenue() {
             <Text style={s.heroFooterValue}>{fmt(total, symbol)}</Text>
           </View>
 
-          <View style={s.editHint}>
-            <Ionicons name="pencil-outline" size={11} color="#444" />
-            <Text style={s.editHintText}>Tap to update monthly</Text>
-          </View>
         </TouchableOpacity>
 
         {/* Monthly average + best month */}
@@ -400,31 +486,12 @@ export default function Revenue() {
           </View>
         )}
 
-        {/* Monthly breakdown peek */}
-        {currentMonths.some((m) => m > 0) && (
-          <View style={s.breakdownCard}>
-            <Text style={s.breakdownTitle}>This year, by month</Text>
-            <View style={s.breakdownGrid}>
-              {MONTHS.map((m, i) => {
-                const val = currentMonths[i];
-                const isEmpty = !val || val === 0;
-                return (
-                  <View key={m} style={s.breakdownItem}>
-                    <Text style={s.breakdownMonth}>{m}</Text>
-                    <Text style={[s.breakdownAmount, isEmpty && s.breakdownEmpty]}>
-                      {isEmpty ? '—' : fmt(val, symbol)}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        )}
+        <Recurrings embedded accountType="business" />
 
-        {/* Revenue History */}
+        {/* Business Revenue History */}
         <View style={s.historyCard}>
           <View style={s.historyHeader}>
-            <Text style={s.historyTitle}>Revenue History</Text>
+            <Text style={s.historyTitle}>Business Revenue History</Text>
             <TouchableOpacity style={s.historyAddBtn} onPress={openAddEntry}>
               <Ionicons name="add" size={16} color="#00C896" style={glowGreen} />
             </TouchableOpacity>
@@ -436,12 +503,12 @@ export default function Revenue() {
               onPress={() => openEditEntry(entry)}
             >
               <Text style={s.historyLabel}>{entry.label}</Text>
-              <Text style={s.historyAmount}>{fmt(entry.amount, symbol)}</Text>
+              <Text style={s.historyAmount}>{fmt(displayEntryAmount(entry), symbol)}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 150 }} />
       </ScrollView>
 
       {/* Monthly editor modal */}
@@ -469,7 +536,7 @@ export default function Revenue() {
                   <View key={month} style={s.monthGroup}>
                     <View style={s.monthGroupHeader}>
                       <Text style={s.monthLabel}>{month}</Text>
-                      <TouchableOpacity style={s.addIncomeBtn} onPress={() => addIncome(monthIndex)}>
+                      <TouchableOpacity style={s.addIncomeBtn} onPress={() => openMonthlyIncome(monthIndex)}>
                         <Ionicons name="add" size={15} color="#00C896" />
                         <Text style={s.addIncomeText}>Income</Text>
                       </TouchableOpacity>
@@ -483,6 +550,13 @@ export default function Revenue() {
                           placeholder="Source"
                           placeholderTextColor="#444"
                         />
+                        <TouchableOpacity
+                          style={s.incomeCurrency}
+                          onPress={() => openIncomeCurrencyPicker(monthIndex, income.id)}
+                          accessibilityLabel={`Change ${income.name || 'income'} currency`}
+                        >
+                          <Text style={s.incomeCurrencyText}>{income.currency}</Text>
+                        </TouchableOpacity>
                         <TextInput
                           style={s.incomeAmountInput}
                           value={income.amount}
@@ -599,6 +673,34 @@ export default function Revenue() {
           </View></View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={monthlyIncomeModal.visible} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={s.overlay}><View style={s.sheet}>
+            <Text style={s.sheetTitle}>Add income · {MONTHS[monthlyIncomeModal.monthIndex]}</Text>
+            <Text style={s.inputLabel}>Where did it come from?</Text>
+            <TextInput style={s.input} value={monthlySource} onChangeText={setMonthlySource} placeholder="e.g. Salary, freelance client" placeholderTextColor="#444" autoFocus />
+            <Text style={s.inputLabel}>Currency</Text>
+            <View style={s.currencyGrid}>{CURRENCIES.map((item) => <TouchableOpacity key={item.code} style={[s.currencyPill, monthlyCurrency === item.code && s.currencyPillActive]} onPress={() => setMonthlyCurrency(item.code)}><Text style={[s.currencyPillText, monthlyCurrency === item.code && s.currencyPillTextActive]}>{item.symbol} {item.code}</Text></TouchableOpacity>)}</View>
+            <Text style={s.inputLabel}>Amount ({monthlyCurrency})</Text>
+            <TextInput style={s.input} value={monthlyAmount} onChangeText={setMonthlyAmount} placeholder="0.00" placeholderTextColor="#444" keyboardType="decimal-pad" />
+            <View style={s.sheetActions}><TouchableOpacity style={s.btnCancel} onPress={closeMonthlyIncome}><Text style={s.btnCancelText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={s.btnSave} onPress={saveMonthlyIncome}><Text style={s.btnSaveText}>Add</Text></TouchableOpacity></View>
+          </View></View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={incomeCurrencyPicker.visible} transparent animationType="slide">
+        <View style={s.overlay}><View style={s.sheet}>
+          <Text style={s.sheetTitle}>Choose currency</Text>
+          <View style={s.currencyGrid}>
+            {CURRENCIES.map((item) => <TouchableOpacity key={item.code} style={[s.currencyPill, incomeCurrencyDraft === item.code && s.currencyPillActive]} onPress={() => setIncomeCurrencyDraft(item.code)}><Text style={[s.currencyPillText, incomeCurrencyDraft === item.code && s.currencyPillTextActive]}>{item.symbol} {item.code}</Text></TouchableOpacity>)}
+          </View>
+          <View style={s.sheetActions}>
+            <TouchableOpacity style={s.btnCancel} onPress={closeIncomeCurrencyPicker}><Text style={s.btnCancelText}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity style={s.btnSave} onPress={confirmIncomeCurrency}><Text style={s.btnSaveText}>OK</Text></TouchableOpacity>
+          </View>
+        </View></View>
+      </Modal>
     </View>
   );
 }
@@ -607,9 +709,18 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   header: { paddingHorizontal: 20, paddingVertical: 14 },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
-  scroll: { paddingHorizontal: 16, paddingTop: 112 },
+  scroll: { paddingHorizontal: 16, paddingTop: 120 },
 
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 12 },
+  businessSummary: { ...surface, borderRadius: 20, marginBottom: 12, overflow: 'hidden' },
+  businessSummaryTop: { padding: 24 },
+  businessSummaryDivider: { height: 1, backgroundColor: '#1E1E1E' },
+  businessAccountRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 6 },
+  businessAccountDivider: { borderTopWidth: 1, borderTopColor: '#1C1C1C' },
+  businessAccountLast: { paddingBottom: 18 },
+  businessAccountName: { flex: 1, fontSize: 15, color: '#EEE', fontWeight: '500' },
+  businessAccountAmount: { fontSize: 14, color: '#888', fontWeight: '500', fontVariant: ['tabular-nums'] },
+  businessEmpty: { color: '#555', fontSize: 13, fontWeight: '500', paddingHorizontal: 18, paddingVertical: 18 },
   heroYear: { fontSize: 14, color: '#666', fontWeight: '600', letterSpacing: 1 },
 
   heroAmount: {
@@ -632,9 +743,6 @@ const s = StyleSheet.create({
   heroFooterLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
   heroFooterValue: { fontSize: 15, fontWeight: '700', color: '#AAA', fontVariant: ['tabular-nums'] },
 
-  editHint: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 16, justifyContent: 'center' },
-  editHintText: { fontSize: 11, color: '#444', fontWeight: '500' },
-
   // Stats row (monthly avg, best month)
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   statCard: {
@@ -648,22 +756,6 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 9, fontWeight: '700', color: '#555', letterSpacing: 1.2, marginBottom: 8 },
   statValue: { fontSize: 18, fontWeight: '800', color: '#FFF', fontVariant: ['tabular-nums'] },
   statSub: { fontSize: 11, color: '#444', marginTop: 3, fontWeight: '500' },
-
-  // Monthly breakdown grid
-  breakdownCard: {
-    backgroundColor: '#151515',
-    borderRadius: 14,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#222',
-    marginBottom: 16,
-  },
-  breakdownTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5, marginBottom: 14 },
-  breakdownGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  breakdownItem: { width: '25%', paddingVertical: 8 },
-  breakdownMonth: { fontSize: 10, fontWeight: '600', color: '#444', letterSpacing: 1, marginBottom: 3 },
-  breakdownAmount: { fontSize: 13, fontWeight: '500', color: '#CCC', fontVariant: ['tabular-nums'] },
-  breakdownEmpty: { color: '#2A2A2A', fontWeight: '500' },
 
   footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 8, lineHeight: 18, fontWeight: '500' },
 
@@ -732,7 +824,6 @@ const s = StyleSheet.create({
   },
   historyLabel: { flex: 1, fontSize: 14, color: '#CCC', fontWeight: '500' },
   historyAmount: { fontSize: 14, color: '#888', fontWeight: '500', fontVariant: ['tabular-nums'] },
-
   // Entry modal extras
   inputLabel: {
     fontSize: 11,
@@ -854,6 +945,8 @@ const s = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'right',
   },
+  incomeCurrency: { minWidth: 36, paddingHorizontal: 5, paddingVertical: 8, borderRadius: 8, backgroundColor: '#222', borderWidth: 1, borderColor: '#333', alignItems: 'center' },
+  incomeCurrencyText: { fontSize: 10, color: '#999', fontWeight: '700' },
 
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {

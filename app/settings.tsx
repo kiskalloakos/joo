@@ -23,7 +23,6 @@ import { glowGreen } from '../lib/glows';
 import { CURRENCIES } from '../lib/currencies';
 import { peekCachedUserEmail, setCachedUserEmail } from '../lib/userProfile';
 import { getTabVisibility, peekTabVisibility, saveTabVisibility, type OptionalTab, type TabVisibility } from '../lib/tabVisibility';
-import { exportBackup } from '../lib/backup';
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
@@ -128,7 +127,7 @@ export default function Settings() {
           {([
             ['wealth', 'Wealth', 'trending-up-outline'],
             ['debts', 'Debts', 'card-outline'],
-            ['revenue', 'Revenue', 'arrow-down-circle-outline'],
+            ['business', 'Business', 'briefcase-outline'],
             ['projects', 'Projects', 'hammer-outline'],
             ['recurrings', 'Recurring costs', 'repeat-outline'],
           ] as const).map(([key, label, icon], index) => (
@@ -156,27 +155,6 @@ export default function Settings() {
         </View>
 
         <Text style={s.sectionLabel}>YOUR DATA</Text>
-        <View style={s.card}>
-          <TouchableOpacity
-            style={s.row}
-            onPress={async () => {
-              try {
-                const shared = await exportBackup();
-                if (!shared) Alert.alert('Export unavailable', 'File sharing is not available on this device.');
-              } catch {
-                Alert.alert('Export failed', 'Your backup could not be created. Please try again.');
-              }
-            }}
-          >
-            <View style={s.rowIcon}><Ionicons name="download-outline" size={16} color="#555" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowLabel}>Export backup</Text>
-              <Text style={s.rowHint}>Save a private JSON copy of your data</Text>
-            </View>
-            <Ionicons name="share-outline" size={16} color="#777" />
-          </TouchableOpacity>
-        </View>
-
         {/* Account deletion — kept at the bottom and dim on purpose. Apple
             requires it to exist (5.1.1(v)); a destructive action should be
             hard to fire accidentally. The modal handles confirmation. */}
