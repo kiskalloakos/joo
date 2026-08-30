@@ -106,7 +106,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
     return (
       <SafeAreaView style={s.container}>
         <View style={s.welcomeContent}>
-          <Image source={require('../assets/icon.png')} style={s.brandIcon} />
+          <Image source={require('../assets/joo-ios-icon.png')} style={s.brandIcon} />
           <Text style={s.tagline}>your finances, simplified.</Text>
         </View>
         <View style={s.footer}>

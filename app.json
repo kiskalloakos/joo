@@ -4,10 +4,11 @@
     "slug": "joo",
     "version": "1.0.3",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/joo-ios-icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "famescale",
     "ios": {
+      "icon": "./assets/joo-ios-icon.png",
       "supportsTablet": false,
       "bundleIdentifier": "co.famescale.joo",
       "buildNumber": "8",
@@ -19,13 +20,13 @@
       "package": "co.famescale.joo",
       "versionCode": 4,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/joo-ios-icon.png",
         "backgroundColor": "#0D0D0D"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/joo-ios-icon-192.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -34,7 +35,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-icon.png",
+          "image": "./assets/joo-ios-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#0D0D0D"
         }

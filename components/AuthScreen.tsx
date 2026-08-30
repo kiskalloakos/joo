@@ -84,7 +84,7 @@ export default function AuthScreen() {
         style={s.flex}
       >
         <View style={s.brandBlock}>
-          <Image source={require('../assets/icon.png')} style={s.brandIcon} />
+          <Image source={require('../assets/joo-ios-icon.png')} style={s.brandIcon} />
           <Text style={s.tagline}>your finances, simplified.</Text>
         </View>
 

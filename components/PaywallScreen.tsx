@@ -80,7 +80,7 @@ export default function PaywallScreen({ onUnlocked }: { onUnlocked: () => void }
     <SafeAreaView style={s.container}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.brandBlock}>
-          <Image source={require('../assets/icon.png')} style={s.brandIcon} />
+          <Image source={require('../assets/joo-ios-icon.png')} style={s.brandIcon} />
           <Text style={s.tagline}>your trial has ended</Text>
         </View>
 

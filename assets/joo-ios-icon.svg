@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 2084 2084" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <defs>
+        <!-- A quiet top-left key light gives the flat wordmark an iOS-like sense of depth. -->
+        <radialGradient id="key-light" cx="27%" cy="18%" r="92%">
+            <stop offset="0%" stop-color="#173D33"/>
+            <stop offset="42%" stop-color="#10241F"/>
+            <stop offset="100%" stop-color="#090B0A"/>
+        </radialGradient>
+        <radialGradient id="mark-glow" cx="50%" cy="53%" r="42%">
+            <stop offset="0%" stop-color="#00C896" stop-opacity="0.14"/>
+            <stop offset="62%" stop-color="#00C896" stop-opacity="0.025"/>
+            <stop offset="100%" stop-color="#00C896" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="top-sheen" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.08"/>
+            <stop offset="18%" stop-color="#FFFFFF" stop-opacity="0"/>
+        </linearGradient>
+        <filter id="wordmark-shadow" x="-20%" y="-30%" width="140%" height="170%">
+            <feDropShadow dx="0" dy="24" stdDeviation="22" flood-color="#000000" flood-opacity="0.52"/>
+        </filter>
+        <filter id="wordmark-light" x="-20%" y="-30%" width="140%" height="170%">
+            <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#00C896" flood-opacity="0.16"/>
+        </filter>
+    </defs>
+    <!-- The system adds its own rounded-square mask. Keep the source full bleed. -->
+    <rect width="2084" height="2084" fill="#0D0D0D"/>
+    <rect width="2084" height="2084" fill="url(#key-light)"/>
+    <rect width="2084" height="2084" fill="url(#mark-glow)"/>
+    <rect width="2084" height="2084" fill="url(#top-sheen)"/>
+    <path d="M220 178C650 48 1434 48 1864 178" fill="none" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="3"/>
+    <g filter="url(#wordmark-shadow)">
+    <g filter="url(#wordmark-light)">
+    <g transform="matrix(0.731325,0,0,0.731325,-20.088014,552.281424)">
+        <g transform="matrix(1200,0,0,1200,547.265087,1012.376517)">
+            <path d="M-0.003,0.15L-0.003,0.038L0.057,0.038C0.076,0.038 0.091,0.034 0.101,0.026C0.111,0.018 0.116,0.002 0.116,-0.022L0.116,-0.536L0.266,-0.536L0.266,-0.018C0.266,0.042 0.253,0.085 0.226,0.111C0.199,0.137 0.152,0.15 0.087,0.15L-0.003,0.15ZM0.113,-0.602L0.113,-0.722L0.268,-0.722L0.268,-0.602L0.113,-0.602Z" style="fill:rgb(0,200,150);fill-rule:nonzero;"/>
+        </g>
+        <g transform="matrix(1200,0,0,1200,932.941601,1012.376517)">
+            <path d="M0.309,0.012C0.255,0.012 0.207,0 0.166,-0.023C0.125,-0.046 0.093,-0.078 0.071,-0.12C0.048,-0.162 0.037,-0.212 0.037,-0.268C0.037,-0.325 0.048,-0.374 0.071,-0.416C0.093,-0.457 0.125,-0.49 0.166,-0.513C0.207,-0.536 0.255,-0.548 0.309,-0.548C0.364,-0.548 0.412,-0.536 0.452,-0.513C0.493,-0.49 0.525,-0.457 0.547,-0.416C0.57,-0.374 0.581,-0.325 0.581,-0.268C0.581,-0.212 0.57,-0.162 0.547,-0.12C0.525,-0.078 0.493,-0.046 0.452,-0.023C0.412,0 0.364,0.012 0.309,0.012ZM0.309,-0.103C0.347,-0.103 0.376,-0.118 0.396,-0.147C0.416,-0.175 0.427,-0.216 0.427,-0.268C0.427,-0.32 0.416,-0.36 0.396,-0.389C0.376,-0.418 0.347,-0.433 0.309,-0.433C0.272,-0.433 0.243,-0.418 0.222,-0.389C0.202,-0.36 0.191,-0.32 0.191,-0.268C0.191,-0.216 0.202,-0.175 0.222,-0.147C0.243,-0.118 0.272,-0.103 0.309,-0.103Z" style="fill:rgb(0,200,150);fill-rule:nonzero;"/>
+        </g>
+        <g transform="matrix(1200,0,0,1200,1662.539403,1012.376517)">
+            <path d="M0.309,0.012C0.255,0.012 0.207,0 0.166,-0.023C0.125,-0.046 0.093,-0.078 0.071,-0.12C0.048,-0.162 0.037,-0.212 0.037,-0.268C0.037,-0.325 0.048,-0.374 0.071,-0.416C0.093,-0.457 0.125,-0.49 0.166,-0.513C0.207,-0.536 0.255,-0.548 0.309,-0.548C0.364,-0.548 0.412,-0.536 0.452,-0.513C0.493,-0.49 0.525,-0.457 0.547,-0.416C0.57,-0.374 0.581,-0.325 0.581,-0.268C0.581,-0.212 0.57,-0.162 0.547,-0.12C0.525,-0.078 0.493,-0.046 0.452,-0.023C0.412,0 0.364,0.012 0.309,0.012ZM0.309,-0.103C0.347,-0.103 0.376,-0.118 0.396,-0.147C0.416,-0.175 0.427,-0.216 0.427,-0.268C0.427,-0.32 0.416,-0.36 0.396,-0.389C0.376,-0.418 0.347,-0.433 0.309,-0.433C0.272,-0.433 0.243,-0.418 0.222,-0.389C0.202,-0.36 0.191,-0.32 0.191,-0.268C0.191,-0.216 0.202,-0.175 0.222,-0.147C0.243,-0.118 0.272,-0.103 0.309,-0.103Z" style="fill:rgb(0,200,150);fill-rule:nonzero;"/>
+        </g>
+        <g transform="matrix(1200,0,0,1200,2404.137206,1012.376517)">
+        </g>
+    </g>
+    </g>
+    </g>
+</svg>
