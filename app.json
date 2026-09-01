@@ -11,7 +11,7 @@
       "icon": "./assets/joo-ios-icon.png",
       "supportsTablet": false,
       "bundleIdentifier": "co.famescale.joo",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "config": {
         "usesNonExemptEncryption": false
       }
