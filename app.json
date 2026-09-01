@@ -51,12 +51,6 @@
         "projectId": "9bfba67d-9223-410d-ae19-03d31dc80615"
       }
     },
-    "owner": "kiskalloakos",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/9bfba67d-9223-410d-ae19-03d31dc80615"
-    }
+    "owner": "kiskalloakos"
   }
 }
