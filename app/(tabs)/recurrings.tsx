@@ -15,7 +15,6 @@ import { AppText as Text } from '../../components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { CURRENCIES } from '../../lib/currencies';
 import {
   getCurrencyForPage,
@@ -96,7 +95,6 @@ export default function Recurrings({
   const insets = useSafeAreaInsets();
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
-  const [trackW, setTrackW] = useState(0);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
   // FX rates: costs are in the page's display currency, but a funding cash
   // account may hold a different one — paying converts between the two.
@@ -437,15 +435,9 @@ export default function Recurrings({
           </View>
           <View
             style={s.barTrack}
-            onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
           >
             <View style={[s.barClip, { width: `${pct * 100}%` }]}>
-              <LinearGradient
-                colors={['#FFA94D', '#00C896']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ width: trackW || '100%', height: 6 }}
-              />
+              <View style={s.barFill} />
             </View>
           </View>
           <View style={s.progressFooter}>
@@ -792,6 +784,15 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   barClip: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  barFill: {
+    width: '100%',
+    height: 6,
+    backgroundColor: '#00C896',
+    ...Platform.select({
+      web: { backgroundImage: 'linear-gradient(to right, #FFA94D, #00C896)' },
+      default: { experimental_backgroundImage: 'linear-gradient(to right, #FFA94D, #00C896)' },
+    }),
+  },
   progressFooter: { minHeight: 18, flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 9 },
   progressStatus: { fontSize: 12, color: '#777', fontWeight: '500' },
 

@@ -255,10 +255,10 @@ export default function Business() {
     );
   };
 
-  const liveTotal = monthInputs.reduce(
-    (sum, month) => sum + month.reduce((monthSum, income) => monthSum + convert(parseAmount(income.amount) || 0, income.currency ?? currency, currency, rates.rates), 0),
-    0,
+  const liveMonthTotals = monthInputs.map((month) =>
+    month.reduce((sum, income) => sum + convert(parseAmount(income.amount) || 0, income.currency ?? currency, currency, rates.rates), 0),
   );
+  const liveTotal = liveMonthTotals.reduce((sum, amount) => sum + amount, 0);
 
   const saveEdit = async () => {
     if (!current) return;
@@ -570,6 +570,10 @@ export default function Business() {
                         </TouchableOpacity>
                       </View>
                     ))}
+                    <View style={s.monthTotalRow}>
+                      <Text style={s.monthTotalLabel}>Monthly total</Text>
+                      <Text selectable style={s.monthTotalValue}>{fmt(liveMonthTotals[monthIndex], symbol)}</Text>
+                    </View>
                   </View>
                 ))}
               </ScrollView>
@@ -715,7 +719,7 @@ const s = StyleSheet.create({
   businessSummary: { ...surface, borderRadius: 20, marginBottom: 12, overflow: 'hidden' },
   businessSummaryTop: { padding: 24 },
   businessSummaryDivider: { height: 1, backgroundColor: '#1E1E1E' },
-  businessAccountRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 6 },
+  businessAccountRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 18 },
   businessAccountDivider: { borderTopWidth: 1, borderTopColor: '#1C1C1C' },
   businessAccountLast: { paddingBottom: 18 },
   businessAccountName: { flex: 1, fontSize: 15, color: '#EEE', fontWeight: '500' },
@@ -922,6 +926,9 @@ const s = StyleSheet.create({
   monthGroup: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
   monthGroupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   monthLabel: { fontSize: 13, fontWeight: '600', color: '#AAA' },
+  monthTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingTop: 4 },
+  monthTotalLabel: { fontSize: 12, color: '#999' },
+  monthTotalValue: { flexShrink: 1, fontSize: 14, fontWeight: '600', color: '#00C896', textAlign: 'right', fontVariant: ['tabular-nums'] },
   addIncomeBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 3, paddingHorizontal: 5 },
   addIncomeText: { color: '#00C896', fontSize: 12, fontWeight: '600' },
   incomeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },

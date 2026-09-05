@@ -13,7 +13,6 @@ import {
 import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import { surface } from '../../lib/surface';
 import { CURRENCIES } from '../../lib/currencies';
@@ -157,12 +156,7 @@ export default function Debts() {
             <>
               <View style={s.barTrack}>
                 <View style={[s.barClip, { width: `${pct * 100}%` }]}>
-                  <LinearGradient
-                    colors={['#FFA94D', '#00C896']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: pct > 0 ? 1 / pct : 1, y: 0 }}
-                    style={{ flex: 1 }}
-                  />
+                  <View style={s.debtBarFill} />
                 </View>
               </View>
               <Text style={s.progressText}>
@@ -426,6 +420,14 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   barClip: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  debtBarFill: {
+    flex: 1,
+    backgroundColor: '#00C896',
+    ...Platform.select({
+      web: { backgroundImage: 'linear-gradient(to right, #FFA94D, #00C896)' },
+      default: { experimental_backgroundImage: 'linear-gradient(to right, #FFA94D, #00C896)' },
+    }),
+  },
   progressText: {
     fontSize: 11,
     color: '#888',

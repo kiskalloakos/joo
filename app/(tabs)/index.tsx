@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -10,11 +10,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Switch,
+  Image,
 } from 'react-native';
 import { AppText as Text } from '../../components/AppText';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage, peekCurrencySettings } from '../../lib/currency';
 import { CURRENCIES } from '../../lib/currencies';
 import {
@@ -57,6 +57,9 @@ import TrialBanner from '../../components/TrialBanner';
 import Recurrings from './recurrings';
 import { registerHomeHeaderActions } from '../../lib/homeHeaderActions';
 import { getTabVisibility, peekTabVisibility, subscribeTabVisibility, type TabVisibility } from '../../lib/tabVisibility';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
+import { recognizeReceiptText } from '../../modules/receipt-ocr/src';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -79,6 +82,28 @@ function fmt(value: number, symbol: string): string {
 
 function parseAmt(s: string): number {
   return parseAmount(s);
+}
+
+function extractReceiptAmount(lines: string[]): string | null {
+  const priority = lines.filter((line) => /total|amount|suma|de plat[aă]|payable|due|balance|valoare/i.test(line));
+  const candidates = [...priority, ...lines];
+  const pattern = /(?<!\d)(\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d{2})|\d+[.,]\d{2})(?!\d)/g;
+  for (const line of candidates) {
+    const matches = [...line.replace(/\s+/g, ' ').matchAll(pattern)];
+    const raw = matches.at(-1)?.[1];
+    if (!raw) continue;
+    const compact = raw.replace(/\s/g, '');
+    const lastComma = compact.lastIndexOf(',');
+    const lastDot = compact.lastIndexOf('.');
+    const decimalIndex = Math.max(lastComma, lastDot);
+    const hasDecimal = decimalIndex >= 0 && compact.length - decimalIndex - 1 === 2;
+    const normalized = hasDecimal
+      ? compact.slice(0, decimalIndex).replace(/[.,]/g, '') + '.' + compact.slice(decimalIndex + 1)
+      : compact.replace(/[.,]/g, '');
+    const amount = Number(normalized);
+    if (Number.isFinite(amount) && amount > 0) return amount.toFixed(2);
+  }
+  return null;
 }
 
 function ordinal(n: number): string {
@@ -119,6 +144,10 @@ export default function Dashboard() {
   const [moneyCurrency, setMoneyCurrency] = useState<string>(
     () => peekCurrencySettings().global,
   );
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
 
   const [historyVisible, setHistoryVisible] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>(peekTransactions);
@@ -136,6 +165,51 @@ export default function Dashboard() {
 
   const closeMoneyModal = useCallback(() => {
     setMoneyModal((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const openReceiptCamera = useCallback(async () => {
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+      if (!result.granted) {
+        Alert.alert('Camera access needed', 'Allow camera access in Settings to scan a receipt.');
+        return;
+      }
+    }
+    setCameraVisible(true);
+  }, [cameraPermission?.granted, requestCameraPermission]);
+
+  const pickReceiptImage = useCallback(async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.85,
+    });
+    if (!result.canceled) {
+      const uri = result.assets[0]?.uri ?? null;
+      setReceiptUri(uri);
+      if (uri) {
+        try {
+          const amount = extractReceiptAmount(await recognizeReceiptText(uri));
+          if (amount) setMoneyAmount(amount);
+        } catch {
+          // OCR is available in the native TestFlight build; attachment still works if it fails.
+        }
+      }
+    }
+  }, []);
+
+  const captureReceipt = useCallback(async () => {
+    const photo = await cameraRef.current?.takePictureAsync({ quality: 0.85 });
+    if (photo?.uri) {
+      setReceiptUri(photo.uri);
+      setCameraVisible(false);
+      try {
+        const amount = extractReceiptAmount(await recognizeReceiptText(photo.uri));
+        if (amount) setMoneyAmount(amount);
+      } catch {
+        // OCR is available in the native TestFlight build; attachment still works if it fails.
+      }
+    }
   }, []);
 
   const openHistory = useCallback(() => {
@@ -465,24 +539,18 @@ export default function Dashboard() {
           {tabVisibility.recurrings && monthlyCostTotal > 0 && <>
             <View style={s.paymentProgressHeader}>
               <Text style={s.paymentProgressLabel}>MONTHLY PAYMENTS</Text>
+              {unpaidCosts === 0 && <Text style={s.paymentCompleteLabel}>All paid</Text>}
             </View>
-            <View style={[s.paymentTrack, unpaidCosts === 0 && s.paymentTrackComplete]}>
-              <LinearGradient
-                colors={['#291E18', '#15382E']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={s.paymentTrackTint}
-              />
+            <View style={s.paymentTrack}>
+              {unpaidCosts === 0 ? <View style={s.paymentCompleteBar} /> : <>
+              <View style={s.paymentTrackTint} />
               <View style={[s.paymentClip, { width: `${monthlyProgress * 100}%` }]}>
-                <LinearGradient colors={['#FFA94D', '#E8C868', '#00C896']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.paymentFill}>
+                <View style={s.paymentFill}>
                   <View style={s.paymentGloss} />
-                </LinearGradient>
+                </View>
               </View>
-              <View style={[s.paymentMarker, unpaidCosts === 0 && s.paymentMarkerComplete, { left: `${unpaidCosts === 0 ? 95 : Math.min(98, Math.max(2, monthlyProgress * 100))}%` }]}>
-                {unpaidCosts === 0
-                  ? <Ionicons name="checkmark" size={19} color="#07120F" />
-                  : <View style={s.paymentMarkerCore} />}
-              </View>
+              <View style={[s.paymentMarker, { left: `${Math.min(98, Math.max(2, monthlyProgress * 100))}%` }]} />
+              </>}
             </View>
           </>}
         </TouchableOpacity>
@@ -669,6 +737,30 @@ export default function Dashboard() {
                   keyboardType="decimal-pad"
                   autoFocus
                 />
+                <View style={s.receiptActions}>
+                  <TouchableOpacity style={s.receiptButton} onPress={openReceiptCamera}>
+                    <Ionicons name="camera-outline" size={17} color="#00C896" />
+                    <Text style={s.receiptButtonText}>Scan receipt</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.receiptButton} onPress={pickReceiptImage}>
+                    <Ionicons name="image-outline" size={17} color="#00C896" />
+                    <Text style={s.receiptButtonText}>Attach image</Text>
+                  </TouchableOpacity>
+                </View>
+                {receiptUri && (
+                  <View style={s.receiptPreviewCard}>
+                    <Image source={{ uri: receiptUri }} style={s.receiptPreviewImage} />
+                    <View style={s.receiptPreviewRow}>
+                      <View style={s.receiptPreviewCopy}>
+                      <Text style={s.receiptAttached}>Receipt attached</Text>
+                      <Text style={s.receiptHint}>Enter the amount shown on the receipt.</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => setReceiptUri(null)} hitSlop={8}>
+                        <Ionicons name="close-circle" size={20} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
 
                 <Text style={s.inputLabel}>Currency</Text>
                 <View style={s.ccyPickerContent}>
@@ -751,6 +843,23 @@ export default function Dashboard() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={cameraVisible} animationType="slide">
+        <View style={s.cameraScreen}>
+          <CameraView ref={cameraRef} style={s.camera} facing="back">
+            <View style={s.cameraGuide} />
+            <View style={s.cameraControls}>
+              <TouchableOpacity style={s.cameraCancel} onPress={() => setCameraVisible(false)}>
+                <Text style={s.cameraCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.captureButton} onPress={captureReceipt} accessibilityLabel="Capture receipt">
+                <View style={s.captureButtonInner} />
+              </TouchableOpacity>
+              <View style={s.cameraSpacer} />
+            </View>
+          </CameraView>
+        </View>
       </Modal>
 
 
@@ -904,17 +1013,35 @@ const s = StyleSheet.create({
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroSubLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
   heroSubValue: { fontSize: 17, fontWeight: '700', color: '#AAA', fontVariant: ['tabular-nums'] },
-  paymentProgressHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 22 },
+  paymentProgressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22 },
   paymentProgressLabel: { fontSize: 10, fontWeight: '700', color: '#666', letterSpacing: 1.2 },
+  paymentCompleteLabel: { fontSize: 11, fontWeight: '600', color: '#00C896' },
   paymentTrack: { height: 10, borderRadius: 5, overflow: 'visible', marginTop: 10, justifyContent: 'center' },
-  paymentTrackComplete: { shadowColor: '#00C896', shadowOpacity: 0.45, shadowRadius: 9, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
-  paymentTrackTint: { ...StyleSheet.absoluteFill, borderRadius: 5, borderWidth: 1, borderColor: '#2B2B2B' },
+  paymentCompleteBar: { height: 10, width: '100%', borderRadius: 5, backgroundColor: '#00C896' },
+  paymentTrackTint: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#2B2B2B',
+    backgroundColor: '#15382E',
+    ...Platform.select({
+      web: { backgroundImage: 'linear-gradient(to right, #291E18, #15382E)' },
+      default: { experimental_backgroundImage: 'linear-gradient(to right, #291E18, #15382E)' },
+    }),
+  },
   paymentClip: { height: 10, borderRadius: 5, overflow: 'hidden' },
-  paymentFill: { height: 10, width: '100%', justifyContent: 'flex-start' },
+  paymentFill: {
+    height: 10,
+    width: '100%',
+    justifyContent: 'flex-start',
+    backgroundColor: '#00C896',
+    ...Platform.select({
+      web: { backgroundImage: 'linear-gradient(to right, #FFA94D, #E8C868, #00C896)' },
+      default: { experimental_backgroundImage: 'linear-gradient(to right, #FFA94D, #E8C868, #00C896)' },
+    }),
+  },
   paymentGloss: { height: 3, width: '100%', backgroundColor: 'rgba(255,255,255,0.26)', borderTopLeftRadius: 5, borderTopRightRadius: 5 },
-  paymentMarker: { position: 'absolute', width: 16, height: 16, marginLeft: -8, borderRadius: 8, backgroundColor: '#111', borderWidth: 2, borderColor: '#9CE8CA', alignItems: 'center', justifyContent: 'center', shadowColor: '#00C896', shadowOpacity: 0.55, shadowRadius: 7, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
-  paymentMarkerComplete: { width: 30, height: 30, marginLeft: -15, borderRadius: 15, backgroundColor: '#00C896', borderColor: '#B9F7DD', shadowOpacity: 0.8, shadowRadius: 12, elevation: 8 },
-  paymentMarkerCore: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#00C896' },
+  paymentMarker: { position: 'absolute', width: 14, height: 14, marginLeft: -7, borderRadius: 7, backgroundColor: '#00C896' },
 
   card: { ...surface, borderRadius: 16, marginBottom: 16, overflow: 'hidden' },
   cardHeader: {
@@ -973,6 +1100,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginTop: 12,
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#1C1C1C',
@@ -1036,6 +1164,24 @@ const s = StyleSheet.create({
     borderColor: '#2C2C2C',
     fontWeight: '500',
   },
+  receiptActions: { flexDirection: 'row', gap: 8, marginTop: -10, marginBottom: 18 },
+  receiptButton: { flex: 1, minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, backgroundColor: '#10251F', borderWidth: 1, borderColor: '#1E4A3B' },
+  receiptButtonText: { color: '#00C896', fontSize: 12, fontWeight: '600' },
+  receiptPreviewCard: { width: '100%', marginTop: -6, marginBottom: 18, padding: 8, borderRadius: 12, backgroundColor: '#222' },
+  receiptPreviewImage: { width: '100%', height: 150, borderRadius: 8, backgroundColor: '#333', resizeMode: 'cover' },
+  receiptPreviewRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 10 },
+  receiptPreviewCopy: { flex: 1, gap: 3 },
+  receiptAttached: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+  receiptHint: { color: '#777', fontSize: 11 },
+  cameraScreen: { flex: 1, backgroundColor: '#000' },
+  camera: { flex: 1 },
+  cameraGuide: { position: 'absolute', top: '25%', left: '10%', right: '10%', height: '45%', borderWidth: 2, borderColor: 'rgba(255,255,255,0.75)', borderRadius: 18 },
+  cameraControls: { position: 'absolute', left: 0, right: 0, bottom: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 28 },
+  cameraCancel: { minWidth: 72, paddingVertical: 10 },
+  cameraCancelText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  cameraSpacer: { width: 72 },
+  captureButton: { width: 74, height: 74, borderRadius: 37, borderWidth: 4, borderColor: '#FFF', alignItems: 'center', justifyContent: 'center' },
+  captureButtonInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFF' },
   row2col: { flexDirection: 'row', gap: 12 },
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {

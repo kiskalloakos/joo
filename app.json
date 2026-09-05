@@ -40,10 +40,17 @@
           "backgroundColor": "#0D0D0D"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-font",
+      "expo-status-bar",
+      "expo-camera",
+      "expo-image-picker"
     ],
     "experiments": {
       "reactCompiler": true
+    },
+    "autolinking": {
+      "nativeModulesDir": "modules"
     },
     "extra": {
       "router": {},

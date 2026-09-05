@@ -1,105 +1,150 @@
 # joo — Store Listing Copy
 
-Source of truth for App Store Connect + Google Play listings. Edit freely,
-then paste into each store. Character limits noted next to each field.
+Source of truth for the App Store and Google Play pages. This version leads
+with the recurring-bills problem, then proves the broader money dashboard.
+
+---
+
+## Positioning
+
+**joo is the calm, private money dashboard for people who want to see monthly
+bills, savings, debt, and investments in one place — without a subscription.**
+
+Use this idea consistently in screenshots, video, landing-page copy, and ads.
+Do not claim tab reordering or tab hiding: the app has a fixed navigation.
 
 ---
 
 ## App name (App Store: 30 chars · Play title: 30 chars)
 
 ```
-joo — money, simply tracked
+joo: Bills & Money
 ```
-(28 chars)
 
-Alt: `joo — finance, made simple` (26)
+(18 characters)
+
+This retains the brand while putting the highest-intent use case in the title.
 
 ---
 
 ## Subtitle (App Store only, 30 chars)
 
 ```
-Dashboard for your money.
+Bills, savings & debt—simple
 ```
-(25 chars)
 
-Alt: `Track money. Stay in control.` (29)
+(28 characters)
 
 ---
 
-## Promotional text (App Store only, 170 chars, can change without re-review)
+## Promotional text (App Store only, 170 chars)
 
 ```
-A clean, fast dashboard for your monthly costs, savings, investments, and debts. One-time $9.99 unlock — no subscriptions, ever.
+See every monthly bill, savings goal, debt, and investment in one calm dashboard. Try everything free for 3 days, then pay $9.99 once—no subscription.
 ```
-(132 chars)
+
+(160 characters)
 
 ---
 
 ## Short description (Google Play only, 80 chars)
 
 ```
-A clean dashboard for monthly costs, savings, investments, and debts.
+Track bills, savings, debt and investments. $9.99 once. No subscriptions.
 ```
-(72 chars)
+
+(76 characters)
 
 ---
 
-## Keywords (App Store only, 100 chars total, comma-separated, no spaces after commas)
+## Keywords (App Store only, 100 chars total, comma-separated)
 
 ```
-budget,finance,money,expenses,recurring,subscriptions,savings,investments,debt,tracker
+budget,expense,recurring,subscription,tracker,savings,investment,debt,monthly,personal finance
 ```
-(96 chars)
+
+(95 characters)
+
+`bills` and `money` are deliberately omitted here because they are in the app
+name. Apple already indexes the name and subtitle; avoid spending keyword space
+on duplicates.
 
 ---
 
 ## Full description (App Store: 4000 · Play: 4000)
 
 ```
-joo is a calm, dark-themed dashboard for the money in your life.
+Your money, clearly organized.
 
-Track what comes in, what goes out, what you're saving, what you owe, and
-without spreadsheets, charts you don't read, or a
-monthly subscription nagging you forever.
+joo is a calm, private dashboard for the money you manage every month. See
+what bills are due, what you are saving, what you owe, and how your investments
+could grow — all in one place.
 
-— WHAT YOU CAN TRACK
-• Monthly and periodic recurring costs (rent, subscriptions, quarterly bills,
-  annual renewals)
-• Savings with monthly contributions and interest projections
-• Investments with compound growth projections
-• Debts and payoff progress
-• Revenue / income sources
+START WITH THE MONTHLY BILLS
+• Track rent, subscriptions, utilities, and any other recurring cost.
+• Add monthly, quarterly, yearly, or custom billing intervals.
+• Mark bills paid and let joo reset them when their next cycle begins.
+• See what is left to pay this month at a glance.
 
-— HOW IT WORKS
-• Add an account, drop in your numbers, and joo does the math.
-• Mark recurring bills as paid — they auto-reset when the next cycle starts
-  (monthly, quarterly, yearly, or any custom interval).
-• Re-order tabs and hide what you don't use. Want only a costs tracker?
-  Switch everything else off. Want the full picture? Turn it all on.
-• Multi-currency support: RON, USD, EUR, GBP, HUF, CHF.
+SEE THE BIGGER PICTURE
+• Savings: set a balance, monthly contribution, and interest rate to project
+  your progress.
+• Debt: track what you owe and follow your payoff progress.
+• Investments: model monthly contributions and compound-growth projections.
+• Income: record revenue and income sources alongside the rest of your money.
+• Use RON, USD, EUR, GBP, HUF, CHF, and more.
 
-— PRIVATE BY DEFAULT
-• No ads. No third-party analytics SDKs. No selling your data.
-• Your financial data is yours — synced securely to your account so it
-  stays with you across devices.
-• Read our privacy policy: famescale.co/privacy
+PRIVATE BY DEFAULT
+No ads. No third-party analytics SDKs. No selling your data. Your data syncs
+securely to your account so it is available across your devices.
 
-— PRICING
-• Free 3-day trial of everything.
-• One-time $9.99 lifetime unlock. No subscriptions. Ever.
-• Your purchase restores across devices automatically.
+SIMPLE, FAIR PRICING
+Try every feature free for 3 days. After that, unlock joo forever for a single
+$9.99 payment. No subscriptions. Ever.
 
-Questions? akos@famescale.co
+Questions or feedback? akos@famescale.co
+Privacy policy: https://famescale.co/privacy
 ```
-(1,476 chars — well under 4000)
 
 ---
 
-## What's New / Release notes (per build, 4000 chars)
+## Screenshot plan (iPhone)
+
+The first three images matter most: Apple uses them on the install sheet. Each
+must be a fresh capture from the current build, with readable in-app content;
+do not reuse the older assets that show the former `Goals` navigation.
+
+| Upload order | Headline on image | Supporting line | Capture required |
+| --- | --- | --- | --- |
+| 1 | **See every monthly bill.** | One calm dashboard for what is due and what is paid. | Recurrings view with a believable list of monthly bills and the “left to pay” total. |
+| 2 | **Save with a clear plan.** | See where consistent monthly contributions can take you. | Savings section of the Wealth screen, with projections visible. |
+| 3 | **Make debt feel manageable.** | Track what you owe and watch your payoff progress. | Debts screen with an outstanding balance and progress. |
+| 4 | **Watch your investments grow.** | Model 1-, 5-, and 10-year compound-growth projections. | Investments section, with the forecast cards visible. |
+| 5 | **$9.99 once. No subscriptions.** | Try everything free for 3 days, then unlock joo forever. | A clean, truthful paywall or onboarding screen. |
+
+For screenshot 1, use the words above rather than the more generic “Your money.
+One place.” This is the highest-intent outcome and matches the first feature
+people see after installing. Keep headline text high enough to avoid Store UI
+overlap and show the product prominently below it.
+
+---
+
+## App preview (optional, 15–30 seconds)
+
+Open on the recurring-bills view, mark one bill paid, switch to Savings and
+Investment projections, then end on the one-time-price message. No spoken
+voiceover is needed; use concise on-screen captions matching the screenshots.
+
+---
+
+## What's New / release notes (version 1.0.3)
 
 ```
-First release of joo. Thanks for trying it — feedback to akos@famescale.co.
+New in this version:
+
+• Meet Business: keep business income, accounts, and recurring costs together.
+• Track money more flexibly with per-item currencies and clearer debt payoff progress.
+• Refined navigation, dashboards, and account settings, plus reliability improvements.
 ```
 
 ---
@@ -109,19 +154,21 @@ First release of joo. Thanks for trying it — feedback to akos@famescale.co.
 | Field | Value |
 | --- | --- |
 | Primary category | Finance |
-| Secondary category | (leave blank) |
-| Age rating | 4+ (no objectionable content) |
+| Secondary category | Productivity (optional; omit if unavailable or inappropriate) |
+| Age rating | 4+ |
 | Content rights | You do not contain, show, or access third-party content |
 | Privacy policy URL | https://famescale.co/privacy |
 | Support URL | https://famescale.co/support |
-| Marketing URL | (optional — leave blank or https://famescale.co) |
+| Marketing URL | https://famescale.co |
 | Copyright | © 2026 Akos Kis-Kallo |
 
-### App Privacy ("Data the app collects")
-- Contact info → Email Address — Linked to user, used for App Functionality (account auth)
-- Financial info → Other Financial Info — Linked to user, used for App Functionality (the data the app stores)
-- **Not collected:** Location, Contacts, Photos, Browsing history, Search history, Identifiers, Usage Data, Diagnostics, Purchases (other than the app's own IAP).
-- Tracking: **No** (we do not track users across apps/websites owned by other companies).
+### App Privacy (data collected)
+
+- Contact info → Email Address — Linked to user; used for account authentication.
+- Financial info → Other Financial Info — Linked to user; used for app functionality.
+- Not collected: location, contacts, photos, browsing history, search history,
+  identifiers, usage data, diagnostics, or data for third-party tracking.
+- Tracking: No.
 
 ---
 
@@ -135,17 +182,17 @@ First release of joo. Thanks for trying it — feedback to akos@famescale.co.
 | Website | https://famescale.co |
 | Privacy policy | https://famescale.co/privacy |
 | Content rating | Everyone |
-| Target audience | 18+ (or 13+ — recommend 18+ for finance apps) |
+| Target audience | 18+ |
 | Ads | No |
-| In-app purchases | Yes ($9.99 lifetime) |
+| In-app purchases | Yes — one-time $9.99 lifetime unlock |
 
 ### Play Data safety
-Same shape as App Store privacy:
-- Personal info → Email address — Collected, encrypted in transit, optional
-  deletion, used for Account management.
-- Financial info → Financial info (other) — Collected, encrypted in transit,
-  optional deletion, used for App functionality.
-- No data shared with third parties (Supabase = processor, not "sharing").
+
+- Personal info → Email address — collected, encrypted in transit, deletable;
+  used for account management.
+- Financial info → Financial info (other) — collected, encrypted in transit,
+  deletable; used for app functionality.
+- No data is shared with third parties. Supabase is a service provider.
 
 ---
 
@@ -153,11 +200,10 @@ Same shape as App Store privacy:
 
 | Field | Value |
 | --- | --- |
-| Product ID (both stores) | `co.famescale.joo.lifetime` |
-| Type | Non-consumable (App Store) / One-time product (Play) |
-| Reference name (internal) | Lifetime |
-| Display name (shown to user) | Lifetime |
-| Description | Unlock joo forever. One-time purchase, no subscriptions. |
+| Product ID | `co.famescale.joo.lifetime` |
+| Type | Non-consumable (App Store) / one-time product (Play) |
+| Display name | Lifetime |
+| Description | Unlock joo forever with one payment. No subscription. |
 | Price | $9.99 USD (and currency-equivalent tiers) |
 | RevenueCat entitlement | `pro` |
-| RevenueCat offering | `default` (mark lifetime package as the lifetime tier) |
+| RevenueCat offering | `default` |

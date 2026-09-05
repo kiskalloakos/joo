@@ -76,8 +76,8 @@ revenue, currency, setup, transactions) exposes the same shape:
   (read-only check), `SECURITY_TODO.sql`, `MIGRATION_*.sql`. Run
   `SECURITY_VERIFY.sql` in the Supabase SQL editor whenever a table is added.
 
-**Stack:** Expo ~56, React 19.2, React Native 0.85, TypeScript strict, New
-Architecture. expo-router 56 (including iOS-native tabs), Supabase,
+**Stack:** Expo ~57, React 19.2, React Native 0.86, TypeScript strict, New
+Architecture. expo-router 57 (including iOS-native tabs), Supabase,
 gesture-handler/reanimated,
 draggable-flatlist, safe-area-context.
 
@@ -95,7 +95,7 @@ These are non-obvious and have bitten before — respect them:
 - **The bottom navigation is native and fixed.** Do not add page hiding,
   reordering, or runtime-generated `NativeTabs.Trigger` entries; NativeTabs
   requires its route list to be static.
-- **`@expo/cli` must match the Expo SDK major** (56.x). A mismatch
+- **`@expo/cli` must match the Expo SDK major** (57.x). A mismatch
   ships a Metro whose HMR URL format Expo Go rejects, crashing the dev server.
 - **UUIDs come from `newId()`** (`lib/dashboard.ts`, expo-crypto). Never
   `Math.random()`.

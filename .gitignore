@@ -49,3 +49,5 @@ play-store-service-account.json
 # generated native folders
 /ios
 /android
+.vercel
+.env*
