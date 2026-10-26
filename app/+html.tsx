@@ -16,7 +16,7 @@ const CSP = [
   // react-native-web injects element styles inline at runtime.
   "style-src 'self' 'unsafe-inline'",
   `connect-src 'self' ${SUPABASE_HOST} ${SUPABASE_WSS}`,
-  "img-src 'self' data: blob:",
+  `img-src 'self' data: blob: ${SUPABASE_HOST}`,
   "font-src 'self' data:",
   "object-src 'none'",
   "base-uri 'self'",

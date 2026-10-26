@@ -11,7 +11,6 @@ import { AppText as Text } from './AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { glowGreen } from '../lib/glows';
 import {
   getLifetimePackage,
   purchaseLifetime,
@@ -98,7 +97,7 @@ export default function PaywallScreen({ onUnlocked }: { onUnlocked: () => void }
             'Future updates included',
           ].map((line) => (
             <View key={line} style={s.benefitRow}>
-              <Ionicons name="checkmark-circle" size={18} color="#00C896" style={glowGreen} />
+              <Ionicons name="checkmark-circle" size={18} color="#00C896" />
               <Text style={s.benefitText}>{line}</Text>
             </View>
           ))}
@@ -178,11 +177,6 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 16,
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },

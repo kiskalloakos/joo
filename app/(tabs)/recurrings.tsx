@@ -29,6 +29,7 @@ import {
   getDashboard,
   peekDashboard,
   refreshDashboard,
+  subscribeDashboard,
   saveCost as persistCost,
   deleteCost as removeCost,
   saveAccount as persistAccount,
@@ -36,10 +37,9 @@ import {
   currentMonthKey,
 } from '../../lib/dashboard';
 import { logTransaction, deleteLastCostTransaction } from '../../lib/transactions';
-import { nextOccurrence, parseAmount } from '../../lib/finance';
+import { isCostDueThisMonth, nextOccurrence, parseAmount } from '../../lib/finance';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
-import { glowGreen, glowAmber } from '../../lib/glows';
 import { getDropdowns, peekDropdown, saveDropdown } from '../../lib/dropdowns';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -105,6 +105,10 @@ export default function Recurrings({
   const [monthlyExpanded, setMonthlyExpanded] = useState(() => peekDropdown(monthlyKey));
   const [periodicExpanded, setPeriodicExpanded] = useState(() => peekDropdown(periodicKey));
   useEffect(() => subscribeRates(setRates), []);
+  useEffect(() => subscribeDashboard((data) => {
+    setAccounts(data.accounts);
+    setCosts(data.costs);
+  }), []);
 
   useFocusEffect(
     useCallback(() => {
@@ -345,9 +349,7 @@ export default function Recurrings({
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
 
-  // Monthly costs drive the hero. Periodic (quarterly/yearly/custom) bills are
-  // deliberately kept out of the monthly figure and surfaced separately so the
-  // "left to pay this month" number stays honest.
+  // Keep the lists separate; the payment summary includes all bills due this month.
   const scopedCosts = costs.filter((cost) =>
     accountType === 'business' ? cost.accountType === 'business' : cost.accountType !== 'business',
   );
@@ -357,8 +359,10 @@ export default function Recurrings({
   const monthlyCosts = scopedCosts.filter((c) => (c.intervalMonths ?? 1) === 1);
   const periodicCosts = scopedCosts.filter((c) => (c.intervalMonths ?? 1) !== 1);
 
-  const total = monthlyCosts.reduce((sum, c) => sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates), 0);
-  const paid = monthlyCosts.reduce((sum, c) => (c.paid ? sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates) : sum), 0);
+  const dueThisMonth = scopedCosts.filter((cost) => isCostDueThisMonth(cost));
+  const monthlyTotal = monthlyCosts.reduce((sum, c) => sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates), 0);
+  const total = dueThisMonth.reduce((sum, c) => sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates), 0);
+  const paid = dueThisMonth.reduce((sum, c) => (c.paid ? sum + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates) : sum), 0);
   const left = Math.max(0, total - paid);
   const pct = total > 0 ? Math.min(1, paid / total) : 0;
   const currentLiquidity = scopedAccounts.reduce(
@@ -411,7 +415,6 @@ export default function Recurrings({
           name={c.paid ? 'checkmark' : 'time-outline'}
           size={18}
           color={c.paid ? '#00C896' : '#FFA94D'}
-          style={c.paid ? glowGreen : glowAmber}
         />
       </Pressable>
     </Pressable>
@@ -426,7 +429,7 @@ export default function Recurrings({
       >
         {!embedded && <View style={s.heroCard}>
           <Text style={s.heroLabel}>CURRENT LIQUIDITY</Text>
-          <Text style={[s.heroLiquidityAmount, glowGreen]}>{fmt(currentLiquidity, symbol)}</Text>
+          <Text style={s.heroLiquidityAmount}>{fmt(currentLiquidity, symbol)}</Text>
           <View style={s.progressHeader}>
             <Text style={s.progressLabel}>MONTHLY PAYMENTS</Text>
             <Text style={[s.progressValue, left === 0 && total > 0 && s.progressValueComplete]}>
@@ -441,7 +444,7 @@ export default function Recurrings({
             </View>
           </View>
           <View style={s.progressFooter}>
-            {left === 0 && total > 0 ? <><Ionicons name="checkmark-circle" size={15} color="#00C896" style={glowGreen} /><Text style={[s.progressStatus, glowGreen]}>All monthly costs are covered</Text></> : <Text style={s.progressStatus}>{fmt(left, symbol)} left across {monthlyCosts.length} {monthlyCosts.length === 1 ? 'bill' : 'bills'}</Text>}
+            {left === 0 && total > 0 ? <><Ionicons name="checkmark-circle" size={15} color="#00C896" /><Text style={s.progressStatus}>All costs due this month are covered</Text></> : <Text style={s.progressStatus}>{fmt(left, symbol)} left across {dueThisMonth.length} {dueThisMonth.length === 1 ? 'bill' : 'bills'}</Text>}
           </View>
         </View>}
 
@@ -457,7 +460,7 @@ export default function Recurrings({
           }} activeOpacity={0.7}>
             <View>
               <Text style={s.cardTitle}>{accountType === 'business' ? 'Monthly payments' : 'Monthly'}</Text>
-              <Text style={s.cardSub}>{fmt(total, symbol)}/mo · {monthlyCosts.length} {monthlyCosts.length === 1 ? 'bill' : 'bills'}</Text>
+              <Text style={s.cardSub}>{fmt(monthlyTotal, symbol)}/mo · {monthlyCosts.length} {monthlyCosts.length === 1 ? 'bill' : 'bills'}</Text>
             </View>
             <Ionicons name={monthlyExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#555" />
           </TouchableOpacity>
@@ -472,8 +475,8 @@ export default function Recurrings({
             <>
               {sorted.map((c, i) => renderCostRow(c, i, `Due ${ordinal(c.dueDay ?? 1)}`))}
               <TouchableOpacity style={s.addCostRow} onPress={openAdd}>
-                <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
-                <Text style={[s.addCostText, glowGreen]}>Add {accountType === 'business' ? 'Payment' : 'Recurring'}</Text>
+                <Ionicons name="add-circle-outline" size={16} color="#00C896" />
+                <Text style={s.addCostText}>Add {accountType === 'business' ? 'Payment' : 'Recurring'}</Text>
               </TouchableOpacity>
             </>
           ))}
@@ -511,8 +514,8 @@ export default function Recurrings({
               ),
             )}
             <TouchableOpacity style={s.addCostRow} onPress={openAdd}>
-              <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
-              <Text style={[s.addCostText, glowGreen]}>Add Periodic {accountType === 'business' ? 'Payment' : ''}</Text>
+              <Ionicons name="add-circle-outline" size={16} color="#00C896" />
+              <Text style={s.addCostText}>Add Periodic {accountType === 'business' ? 'Payment' : ''}</Text>
             </TouchableOpacity>
             </>}
           </View>
@@ -944,11 +947,6 @@ const s = StyleSheet.create({
     backgroundColor: '#00C896',
     alignItems: 'center',
     marginTop: 8,
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
   deleteLink: {

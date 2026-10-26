@@ -13,7 +13,6 @@ import { AppText as Text } from './AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase, getRedirectUrl } from '../lib/supabase';
-import { glowGreen } from '../lib/glows';
 
 type Mode = 'sign-in' | 'sign-up' | 'reset';
 
@@ -93,7 +92,7 @@ export default function AuthScreen() {
 
           {resetSent ? (
             <View style={s.sentBox}>
-              <Ionicons name="mail-outline" size={28} color="#00C896" style={glowGreen} />
+              <Ionicons name="mail-outline" size={28} color="#00C896" />
               <Text style={s.sentTitle}>Check your email</Text>
               <Text style={s.sentText}>
                 We sent a password reset link to{'\n'}
@@ -225,9 +224,6 @@ const s = StyleSheet.create({
     color: '#00C896',
     fontWeight: '600',
     letterSpacing: 0.3,
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   input: {
@@ -264,11 +260,6 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 6,
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
@@ -278,9 +269,6 @@ const s = StyleSheet.create({
   switchLink: {
     color: '#00C896',
     fontWeight: '600',
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   // "Check your email" view

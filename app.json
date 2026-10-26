@@ -2,7 +2,7 @@
   "expo": {
     "name": "joo",
     "slug": "joo",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/joo-ios-icon.png",
     "userInterfaceStyle": "dark",
@@ -11,7 +11,7 @@
       "icon": "./assets/joo-ios-icon.png",
       "supportsTablet": false,
       "bundleIdentifier": "co.famescale.joo",
-      "buildNumber": "11",
+      "buildNumber": "15",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -44,7 +44,8 @@
       "expo-font",
       "expo-status-bar",
       "expo-camera",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-asset"
     ],
     "experiments": {
       "reactCompiler": true

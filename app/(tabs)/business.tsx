@@ -33,7 +33,6 @@ import {
 } from '../../lib/revenue';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
-import { glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { parseAmount } from '../../lib/finance';
 import { registerBusinessHeaderAction } from '../../lib/businessHeaderActions';
@@ -417,7 +416,7 @@ export default function Business() {
         {/* New-year reminder banner */}
         {showNewYearBanner && (
           <View style={s.banner}>
-            <Ionicons name="alarm-outline" size={18} color="#00C896" style={glowGreen} />
+            <Ionicons name="alarm-outline" size={18} color="#00C896" />
             <View style={{ flex: 1 }}>
               <Text style={s.bannerTitle}>It's {calYear}</Text>
               <Text style={s.bannerSub}>
@@ -444,13 +443,11 @@ export default function Business() {
                 name={growthPct >= 0 ? 'trending-up' : 'trending-down'}
                 size={14}
                 color={growthPct >= 0 ? '#00C896' : '#888'}
-                style={growthPct >= 0 ? glowGreen : undefined}
               />
               <Text
                 style={[
                   s.growthText,
                   { color: growthPct >= 0 ? '#00C896' : '#888' },
-                  growthPct >= 0 && glowGreen,
                 ]}
               >
                 {growthPct >= 0 ? '+' : ''}
@@ -493,7 +490,7 @@ export default function Business() {
           <View style={s.historyHeader}>
             <Text style={s.historyTitle}>Business Revenue History</Text>
             <TouchableOpacity style={s.historyAddBtn} onPress={openAddEntry}>
-              <Ionicons name="add" size={16} color="#00C896" style={glowGreen} />
+              <Ionicons name="add" size={16} color="#00C896" />
             </TouchableOpacity>
           </View>
           {sortedEntries.map((entry, i) => (
@@ -622,7 +619,7 @@ export default function Business() {
                       activeOpacity={0.7}
                     >
                       <Text style={[s.yearRowText, selected && s.yearRowTextActive]}>{y}</Text>
-                      {selected && <Ionicons name="checkmark" size={16} color="#00C896" style={glowGreen} />}
+                      {selected && <Ionicons name="checkmark" size={16} color="#00C896" />}
                     </TouchableOpacity>
                   );
                 })}
@@ -734,9 +731,6 @@ const s = StyleSheet.create({
     letterSpacing: -1.4,
     marginTop: 12,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.25)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 14,
   },
 
   growthRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
@@ -783,11 +777,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
   },
   bannerBtnText: { fontSize: 12, fontWeight: '700', color: '#000' },
   bannerClose: { padding: 4 },
@@ -883,9 +872,6 @@ const s = StyleSheet.create({
   yearRowTextActive: {
     color: '#00C896',
     fontWeight: '700',
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   // Modal
@@ -917,9 +903,6 @@ const s = StyleSheet.create({
     color: '#00C896',
     marginTop: 2,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   monthList: { marginBottom: 12 },
@@ -970,11 +953,6 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 

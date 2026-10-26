@@ -5,6 +5,7 @@ import {
   resetStaleCosts,
   monthDiff,
   nextOccurrence,
+  isCostDueThisMonth,
   annualizedPeriodicTotal,
   parseAmount,
 } from './finance';
@@ -236,5 +237,29 @@ describe('parseAmount — locale-tolerant money string parsing', () => {
   it('leading-separator decimals work in both locales', () => {
     expect(parseAmount(',5')).toBe(0.5);
     expect(parseAmount('.5')).toBe(0.5);
+  });
+});
+
+
+describe('isCostDueThisMonth — budget full periodic bills in their due month', () => {
+  const october = new Date(2026, 9, 26);
+  it('includes monthly and legacy bills every month', () => {
+    expect(isCostDueThisMonth({}, october)).toBe(true);
+    expect(isCostDueThisMonth({ intervalMonths: 1 }, october)).toBe(true);
+  });
+  it('includes a yearly bill only in its due month', () => {
+    expect(isCostDueThisMonth({ intervalMonths: 12, dueMonth: 10 }, october)).toBe(true);
+    expect(isCostDueThisMonth({ intervalMonths: 12, dueMonth: 11 }, october)).toBe(false);
+  });
+  it('includes quarterly recurrences beyond the anchor month', () => {
+    expect(isCostDueThisMonth({ intervalMonths: 3, dueMonth: 1 }, october)).toBe(true);
+    expect(isCostDueThisMonth({ intervalMonths: 3, dueMonth: 2 }, october)).toBe(false);
+  });
+  it('counts the whole month even after the due day', () => {
+    expect(isCostDueThisMonth({ intervalMonths: 12, dueMonth: 10 }, new Date(2026, 9, 31))).toBe(true);
+  });
+  it('handles custom intervals and year boundaries', () => {
+    expect(isCostDueThisMonth({ intervalMonths: 2, dueMonth: 11 }, new Date(2027, 0, 1))).toBe(true);
+    expect(isCostDueThisMonth({ intervalMonths: 2, dueMonth: 11 }, new Date(2027, 1, 1))).toBe(false);
   });
 });

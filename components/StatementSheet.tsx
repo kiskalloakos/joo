@@ -1,5 +1,8 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
+  Image,
+  ActivityIndicator,
+  Alert,
   View,
   ScrollView,
   StyleSheet,
@@ -10,14 +13,18 @@ import {
   Platform,
 } from 'react-native';
 import { AppText as Text } from './AppText';
-import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import { Asset } from 'expo-asset';
+import { receiptUrl } from '../lib/receipts';
+import { statementHtml } from '../lib/statementPdf';
 import { Transaction } from '../lib/transactions';
 import { Account } from '../lib/dashboard';
 import { CURRENCIES } from '../lib/currencies';
 import { feedback } from '../lib/feedback';
 import { parseAmount } from '../lib/finance';
-import { glowGreen, glowAmber } from '../lib/glows';
 
 interface Props {
   visible: boolean;
@@ -53,10 +60,6 @@ const MONTH_NAMES = [
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
-
-function daysInMonth(year: number, monthIdx: number): number {
-  return new Date(year, monthIdx + 1, 0).getDate();
 }
 
 function txDateLabel(iso: string): string {
@@ -96,7 +99,7 @@ export default function StatementSheet({
   onEditTransaction,
   onDeleteTransaction,
 }: Props) {
-  const { slices, totalIn, totalOut, biggest, dayTotals, monthTx } = useMemo(() => {
+  const { slices, totalIn, totalOut, biggest, monthTx } = useMemo(() => {
     const monthTx = transactions.filter((t) => {
       const d = new Date(t.createdAt);
       return d.getFullYear() === monthYear && d.getMonth() === monthIndex;
@@ -129,21 +132,38 @@ export default function StatementSheet({
       slices.push({ label: 'Other', amount: otherSum, color: OTHER_COLOR });
     }
 
-    // Day totals (outflow only) — for the day-strip
-    const dayCount = daysInMonth(monthYear, monthIndex);
-    const dayTotals = new Array<number>(dayCount).fill(0);
-    for (const t of monthTx) {
-      if (t.direction !== 'out') continue;
-      const day = new Date(t.createdAt).getDate() - 1;
-      if (day >= 0 && day < dayCount) dayTotals[day] += t.amount;
-    }
-
-    return { slices, totalIn, totalOut, biggest, dayTotals, monthTx };
+    return { slices, totalIn, totalOut, biggest, monthTx };
   }, [transactions, monthYear, monthIndex]);
 
   const net = totalIn - totalOut;
   const totalForDonut = slices.reduce((s, sl) => s + sl.amount, 0);
-  const maxDay = dayTotals.reduce((m, v) => Math.max(m, v), 0);
+  const activityDays = useMemo(() => {
+    const days = new Map<number, Transaction[]>();
+    for (const tx of monthTx) {
+      const day = new Date(tx.createdAt).getDate();
+      const entries = days.get(day) ?? [];
+      entries.push(tx);
+      days.set(day, entries);
+    }
+    return [...days.entries()].sort(([a], [b]) => b - a).map(([day, entries]) => {
+      const totals = new Map<string, { incoming: number; outgoing: number }>();
+      for (const tx of entries) {
+        const ccy = accounts.find((account) => account.id === tx.accountId)?.currency ?? currency;
+        const total = totals.get(ccy) ?? { incoming: 0, outgoing: 0 };
+        if (tx.direction === 'in') total.incoming += tx.amount;
+        else total.outgoing += tx.amount;
+        totals.set(ccy, total);
+      }
+      return {
+        day,
+        label: new Date(monthYear, monthIndex, day).toLocaleDateString('en-GB', {
+          weekday: 'short', day: 'numeric', month: 'short',
+        }),
+        entries: [...entries].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+        totals: [...totals.entries()],
+      };
+    });
+  }, [monthTx, accounts, currency, monthYear, monthIndex]);
 
   // Donut geometry
   const size = 220;
@@ -174,6 +194,49 @@ export default function StatementSheet({
     }
     return out;
   }, [slices, totalForDonut, cx, cy, radius]);
+
+  const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const exportInProgress = useRef(false);
+  const exportPdf = async () => {
+    if (exportInProgress.current) return;
+    exportInProgress.current = true;
+    setExporting(true);
+    try {
+      const html = statementHtml({ monthYear, monthIndex, transactions, accounts, currency });
+      if (Platform.OS === 'web') {
+        const preview = window.open('', '_blank');
+        if (!preview) throw new Error('Allow pop-ups to export your statement.');
+        preview.document.write(html);
+        preview.document.close();
+        preview.focus();
+        preview.print();
+        return;
+      }
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('File sharing is unavailable on this device.');
+      }
+      const font = Asset.fromModule(require('@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf'));
+      await font.downloadAsync();
+      const fontData = await FileSystem.readAsStringAsync(font.localUri ?? font.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const { createStatementPdf } = await import('../lib/statementPdfDocument');
+      const base64 = await createStatementPdf({ monthYear, monthIndex, transactions, accounts, currency }, fontData);
+      const filename = `joo-statement-${monthYear}-${String(monthIndex + 1).padStart(2, '0')}.pdf`;
+      const destination = `${FileSystem.cacheDirectory}${filename}`;
+      await FileSystem.writeAsStringAsync(destination, base64, { encoding: FileSystem.EncodingType.Base64 });
+      await Sharing.shareAsync(destination, {
+        mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: 'Export statement',
+      });
+    } catch (error) {
+      console.warn('[statement export]', error);
+      Alert.alert('Could not export statement', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      exportInProgress.current = false;
+      setExporting(false);
+    }
+  };
 
   // ── Transaction editor ──────────────────────────────────────────────────
   const [editing, setEditing] = useState<Transaction | null>(null);
@@ -241,6 +304,18 @@ export default function StatementSheet({
             </TouchableOpacity>
           </View>
 
+          <TouchableOpacity
+            style={s.exportBtn}
+            onPress={exportPdf}
+            disabled={exporting}
+            accessibilityRole="button"
+            accessibilityLabel="Export statement as PDF"
+            accessibilityState={{ disabled: exporting, busy: exporting }}
+          >
+            {exporting ? <ActivityIndicator size="small" color="#00C896" /> : <Ionicons name="download-outline" size={18} color="#00C896" />}
+            <Text style={s.exportText}>{exporting ? 'Exporting...' : 'Export PDF'}</Text>
+          </TouchableOpacity>
+
           <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
             {totalIn === 0 && totalOut === 0 ? (
               <View style={s.empty}>
@@ -299,7 +374,7 @@ export default function StatementSheet({
                   </Svg>
                   <View style={s.donutCenter} pointerEvents="none">
                     <Text style={s.donutCenterLabel}>SPENT</Text>
-                    <Text style={[s.donutCenterValue, glowAmber]}>{fmt(totalOut, symbol)}</Text>
+                    <Text style={s.donutCenterValue}>{fmt(totalOut, symbol)}</Text>
                     {biggest && (
                       <Text style={s.donutCenterMeta} numberOfLines={1}>
                         biggest: {biggest.label}
@@ -312,13 +387,13 @@ export default function StatementSheet({
                 <View style={s.summaryRow}>
                   <View style={s.summaryCard}>
                     <Text style={s.summaryLabel}>IN</Text>
-                    <Text style={[s.summaryValue, { color: '#00C896' }, glowGreen]}>
+                    <Text style={[s.summaryValue, { color: '#00C896' }]}>
                       +{fmt(totalIn, symbol)}
                     </Text>
                   </View>
                   <View style={s.summaryCard}>
                     <Text style={s.summaryLabel}>OUT</Text>
-                    <Text style={[s.summaryValue, { color: '#FFA94D' }, glowAmber]}>
+                    <Text style={[s.summaryValue, { color: '#FFA94D' }]}>
                       −{fmt(totalOut, symbol)}
                     </Text>
                   </View>
@@ -328,7 +403,6 @@ export default function StatementSheet({
                       style={[
                         s.summaryValue,
                         { color: net >= 0 ? '#00C896' : '#FFA94D' },
-                        net >= 0 ? glowGreen : glowAmber,
                       ]}
                     >
                       {net >= 0 ? '+' : '−'}
@@ -336,24 +410,6 @@ export default function StatementSheet({
                     </Text>
                   </View>
                 </View>
-
-                {/* Day strip — height = day's spending */}
-                {totalOut > 0 && (
-                  <View style={s.dayStripCard}>
-                    <View style={s.dayStripHeader}>
-                      <Text style={s.sectionTitle}>Daily outflow</Text>
-                      <Text style={s.dayStripMeta}>
-                        peak {maxDay > 0 ? fmt(maxDay, symbol) : '—'}
-                      </Text>
-                    </View>
-                    <DayStrip totals={dayTotals} max={maxDay} />
-                    <View style={s.dayStripFooter}>
-                      <Text style={s.dayLabel}>1</Text>
-                      <Text style={s.dayLabel}>{Math.ceil(dayTotals.length / 2)}</Text>
-                      <Text style={s.dayLabel}>{dayTotals.length}</Text>
-                    </View>
-                  </View>
-                )}
 
                 {/* Top expenses list (same data as donut) */}
                 {slices.length > 0 && (
@@ -375,12 +431,24 @@ export default function StatementSheet({
                   </View>
                 )}
 
-                {/* Transactions for this month */}
-                {monthTx.length > 0 && (
-                  <View style={[s.listCard, { marginTop: 12 }]}>
-                    <Text style={s.sectionTitle}>Transactions</Text>
-                    {monthTx.map((tx) => {
+                {/* Readable daily activity replaces the unlabeled month chart. */}
+                {activityDays.map(({ day, label, entries, totals }) => (
+                  <View key={day} style={[s.listCard, { marginTop: 12 }]}>
+                    <View style={s.dayHeader}>
+                      <Text style={s.dayTitle}>{label}</Text>
+                      <Text style={s.dayCount}>{entries.length} {entries.length === 1 ? 'transaction' : 'transactions'}</Text>
+                    </View>
+                    <View style={s.dayTotals}>
+                      {totals.map(([ccy, { incoming, outgoing }]) => (
+                        <View key={ccy} style={s.dayTotalRow}>
+                          {incoming > 0 && <Text selectable style={[s.dayTotalText, { color: '#00C896' }]}>In +{incoming.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {ccy}</Text>}
+                          {outgoing > 0 && <Text selectable style={[s.dayTotalText, { color: '#FFA94D' }]}>Out −{outgoing.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {ccy}</Text>}
+                        </View>
+                      ))}
+                    </View>
+                    {entries.map((tx) => {
                       const account = accounts.find((a) => a.id === tx.accountId);
+                      const txCurrency = account?.currency ?? currency;
                       const isIn = tx.direction === 'in';
                       const kindLabel =
                         tx.kind === 'cost'
@@ -410,19 +478,20 @@ export default function StatementSheet({
                           <Text
                             style={[
                               s.txAmount,
-                              isIn ? glowGreen : glowAmber,
+
                               { color: isIn ? '#00C896' : '#FFA94D' },
                             ]}
                           >
                             {isIn ? '+' : '−'}
-                            {fmt(tx.amount, symbol)}
+                            {tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {txCurrency}
                           </Text>
+                          {tx.receiptPath && <Ionicons name="attach-outline" size={18} color="#00C896" accessibilityLabel="Image attached" />}
                           <Ionicons name="chevron-forward" size={14} color="#444" />
                         </TouchableOpacity>
                       );
                     })}
                   </View>
-                )}
+                ))}
 
                 <View style={{ height: 24 }} />
               </>
@@ -472,6 +541,12 @@ export default function StatementSheet({
             onPress={closeEditor}
           />
           <View style={s.editorSheet}>
+            {editing?.receiptPath && (
+              <TouchableOpacity style={s.exportBtn} onPress={() => setViewingReceipt(editing.receiptPath!)} accessibilityRole="button" accessibilityLabel="View attached image">
+                <Ionicons name="image-outline" size={18} color="#00C896" />
+                <Text style={s.exportText}>View attached image</Text>
+              </TouchableOpacity>
+            )}
             {editing && editing.kind === 'cost' ? (
               <>
                 <Text style={s.editorTitle}>Bill payment</Text>
@@ -575,39 +650,43 @@ export default function StatementSheet({
           </View>
         </View>
       </KeyboardAvoidingView>
+      <ReceiptViewer path={viewingReceipt} onClose={() => setViewingReceipt(null)} />
       </Modal>
     </Modal>
   );
 }
 
-function DayStrip({ totals, max }: { totals: number[]; max: number }) {
-  const width = 320;
-  const height = 56;
-  const n = totals.length;
-  const gap = 2;
-  const barWidth = (width - gap * (n - 1)) / n;
-
+function ReceiptViewer({ path, onClose }: { path: string | null; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setUrl(null);
+    setFailed(false);
+    if (path) receiptUrl(path).then((value) => {
+      if (!cancelled) setUrl(value);
+    }).catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [path, attempt]);
   return (
-    <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-      {totals.map((v, i) => {
-        const h = max > 0 ? (v / max) * (height - 8) : 0;
-        const x = i * (barWidth + gap);
-        const y = height - h;
-        const color = v === 0 ? '#1A1A1A' : '#FFA94D';
-        return (
-          <Rect
-            key={i}
-            x={x}
-            y={y}
-            width={barWidth}
-            height={Math.max(h, 2)}
-            rx={1.5}
-            fill={color}
-            opacity={v === 0 ? 1 : 0.85}
-          />
-        );
-      })}
-    </Svg>
+    <Modal visible={!!path} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111', padding: 20 }}>
+        <View style={s.headerRow}>
+          <Text style={s.monthTitle}>Attached image</Text>
+          <TouchableOpacity style={s.closeBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close image">
+            <Ionicons name="close" size={20} color="#BBB" />
+          </TouchableOpacity>
+        </View>
+        {failed ? (
+          <TouchableOpacity style={s.exportBtn} onPress={() => setAttempt((value) => value + 1)} accessibilityRole="button">
+            <Text style={s.exportText}>Could not load image. Tap to retry.</Text>
+          </TouchableOpacity>
+        ) : url ? (
+          <Image source={{ uri: url }} style={{ flex: 1, width: '100%' }} resizeMode="contain" onError={() => setFailed(true)} accessibilityLabel="Transaction attachment" />
+        ) : <ActivityIndicator color="#00C896" style={{ flex: 1 }} />}
+      </View>
+    </Modal>
   );
 }
 
@@ -625,6 +704,8 @@ const s = StyleSheet.create({
     borderColor: '#2C2C2C',
     maxHeight: '92%',
   },
+  exportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, backgroundColor: '#222', borderRadius: 10, marginBottom: 16 },
+  exportText: { color: '#00C896', fontSize: 14, fontWeight: '600' },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -680,18 +761,12 @@ const s = StyleSheet.create({
   summaryLabel: { fontSize: 9, fontWeight: '700', color: '#555', letterSpacing: 1, marginBottom: 6 },
   summaryValue: { fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
 
-  dayStripCard: {
-    backgroundColor: '#151515',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#222',
-    marginBottom: 12,
-  },
-  dayStripHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  dayStripFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  dayLabel: { fontSize: 9, color: '#444', fontWeight: '600', letterSpacing: 0.5 },
-  dayStripMeta: { fontSize: 10, color: '#555', fontWeight: '500' },
+  dayHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 12 },
+  dayTitle: { fontSize: 15, fontWeight: '700', color: '#EEE' },
+  dayCount: { fontSize: 11, color: '#888', fontWeight: '500' },
+  dayTotals: { gap: 4, paddingTop: 8, paddingBottom: 12 },
+  dayTotalRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  dayTotalText: { fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] },
 
   listCard: {
     backgroundColor: '#151515',

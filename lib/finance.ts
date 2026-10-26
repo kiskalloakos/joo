@@ -88,6 +88,16 @@ export function nextOccurrence(
   return { year: Math.floor(idx / 12), month: (idx % 12) + 1 };
 }
 
+// Include the full bill in this month's budget only when its schedule lands
+// in this calendar month. Payment status does not change the scheduled total.
+export function isCostDueThisMonth(
+  cost: { intervalMonths?: number; dueMonth?: number | null },
+  now: Date = new Date(),
+): boolean {
+  const due = nextOccurrence(cost.dueMonth ?? 1, cost.intervalMonths ?? 1, now);
+  return due.year === now.getFullYear() && due.month === now.getMonth() + 1;
+}
+
 // What a set of non-monthly costs adds up to per year, for the Recurrings
 // "Periodic" headline. Monthly costs (interval 1 / undefined) are excluded —
 // they belong to the monthly figure, deliberately kept separate.

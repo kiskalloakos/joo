@@ -19,7 +19,6 @@ import {
 } from '../lib/currency';
 import { surface } from '../lib/surface';
 import { supabase } from '../lib/supabase';
-import { glowGreen } from '../lib/glows';
 import { CURRENCIES } from '../lib/currencies';
 import { peekCachedUserEmail, setCachedUserEmail } from '../lib/userProfile';
 import { getTabVisibility, peekTabVisibility, saveTabVisibility, type OptionalTab, type TabVisibility } from '../lib/tabVisibility';
@@ -114,7 +113,7 @@ export default function Settings() {
         {/* Profile */}
         <View style={s.profileCard}>
           <View style={s.avatar}>
-            <Ionicons name="person" size={32} color="#00C896" style={glowGreen} />
+            <Ionicons name="person" size={32} color="#00C896" />
           </View>
           <Text style={s.profileName}>{email ?? 'Your Profile'}</Text>
           <Text style={s.profileSub}>joo · personal finance</Text>
@@ -184,7 +183,7 @@ export default function Settings() {
                   <Text style={s.currencyCode}>{c.code}</Text>
                   <Text style={s.currencyName}>{c.name}</Text>
                 </View>
-                {currency === c.code && <Ionicons name="checkmark-circle" size={20} color="#00C896" style={glowGreen} />}
+                {currency === c.code && <Ionicons name="checkmark-circle" size={20} color="#00C896" />}
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={s.closeBtn} onPress={() => setCurrencyModal(false)}>
@@ -359,11 +358,6 @@ const s = StyleSheet.create({
     borderRadius: 10,
     alignSelf: 'stretch',
     alignItems: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   ctaBtnText: { fontSize: 14, fontWeight: '700', color: '#000' },
   overrideBadge: {
@@ -377,9 +371,6 @@ const s = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
     letterSpacing: 0.3,
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   // Per-page picker rows
@@ -394,9 +385,6 @@ const s = StyleSheet.create({
   pageRowValue: { fontSize: 14, color: '#888', fontWeight: '500' },
   pageRowOverride: {
     color: '#00C896',
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
   pageRowHint: { fontSize: 10, color: '#444', letterSpacing: 0.5, fontWeight: '500' },
   divider: { height: 1, backgroundColor: '#222', marginVertical: 8 },
@@ -463,11 +451,6 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 

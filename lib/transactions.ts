@@ -1,5 +1,5 @@
 import { supabase, userId } from './supabase';
-import { reportable } from './sync';
+import { reportable, reportSyncError, reportSyncSuccess } from './sync';
 import { load, peek, save } from './storage';
 
 export type TxDirection = 'in' | 'out';
@@ -13,6 +13,7 @@ export interface Transaction {
   kind: TxKind;
   referenceId: string | null;
   note: string | null;
+  receiptPath?: string | null;
   createdAt: string; // ISO
 }
 
@@ -23,6 +24,8 @@ export function peekTransactions(): Transaction[] {
 }
 
 export async function logTransaction(args: {
+  id?: string;
+  receiptPath?: string | null;
   accountId: string;
   amount: number;
   direction: TxDirection;
@@ -32,18 +35,33 @@ export async function logTransaction(args: {
 }): Promise<void> {
   if (args.amount <= 0) return;
   const uid = await userId();
-  if (!uid) return;
-  await reportable(
-    supabase.from('transactions').insert({
-      user_id: uid,
-      account_id: args.accountId,
-      amount: args.amount,
-      direction: args.direction,
-      kind: args.kind ?? 'manual',
-      reference_id: args.referenceId ?? null,
-      note: args.note ?? null,
-    }),
-  );
+  if (!uid) {
+    if (args.receiptPath) throw new Error('Sign in again before saving the attachment.');
+    return;
+  }
+  const row = {
+    ...(args.id ? { id: args.id } : {}),
+    user_id: uid,
+    account_id: args.accountId,
+    amount: args.amount,
+    direction: args.direction,
+    kind: args.kind ?? 'manual',
+    reference_id: args.referenceId ?? null,
+    note: args.note ?? null,
+    ...(args.receiptPath ? { receipt_path: args.receiptPath } : {}),
+  };
+  if (args.receiptPath) {
+    // A failed receipt save must keep the draft visible, without moving money.
+    // A stable id makes retry safe even if the server accepted a prior request.
+    const { error } = await supabase.from('transactions').upsert(row);
+    if (error) {
+      reportSyncError(error);
+      throw new Error(`Could not save transaction: ${error.message}`);
+    }
+    reportSyncSuccess();
+  } else {
+    await reportable(supabase.from('transactions').insert(row));
+  }
 }
 
 // Undo the most recent payment for a cost (un-ticking it). Rather than
@@ -113,6 +131,7 @@ export async function restoreTransaction(tx: Transaction): Promise<void> {
       reference_id: tx.referenceId ?? null,
       note: tx.note ?? null,
       created_at: tx.createdAt,
+      ...(tx.receiptPath ? { receipt_path: tx.receiptPath } : {}),
     }),
   );
 }
@@ -127,7 +146,7 @@ export async function refreshTransactions(limit = 500): Promise<Transaction[]> {
   if (!uid) return getTransactions(limit);
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, account_id, amount, direction, kind, reference_id, note, created_at')
+    .select('*')
     .eq('user_id', uid)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -140,6 +159,7 @@ export async function refreshTransactions(limit = 500): Promise<Transaction[]> {
     kind: r.kind as TxKind,
     referenceId: r.reference_id,
     note: r.note,
+    receiptPath: r.receipt_path ?? null,
     createdAt: r.created_at,
   }));
   await save(NS, transactions);

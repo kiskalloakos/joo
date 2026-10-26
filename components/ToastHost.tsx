@@ -75,9 +75,6 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: '#00C896',
     fontWeight: '700',
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
   closeBtn: { padding: 6 },
 });

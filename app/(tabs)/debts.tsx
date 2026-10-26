@@ -19,7 +19,6 @@ import { CURRENCIES } from '../../lib/currencies';
 import { Debt, getDebts, peekDebts, refreshDebts, saveDebt, deleteDebt } from '../../lib/debts';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
-import { glowAmber, glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { parseAmount } from '../../lib/finance';
 import { convert, peekRates, subscribeRates, type Rates } from '../../lib/exchangeRates';
@@ -168,7 +167,7 @@ export default function Debts() {
         </View>
         <View style={s.rowRight}>
           {cleared ? (
-            <Text style={[s.clearedTag, glowGreen]}>CLEARED</Text>
+            <Text style={s.clearedTag}>CLEARED</Text>
           ) : (
             <>
               <Text style={s.rowValue}>{fmt(remaining, CURRENCIES.find((c) => c.code === (debt.currency ?? currency))?.symbol ?? symbol)}</Text>
@@ -211,7 +210,7 @@ export default function Debts() {
                   Across {outstandingDebts.length} {outstandingDebts.length === 1 ? 'debt' : 'debts'}
                 </Text>
                 {paidOff > 0 && (
-                  <Text style={[s.heroPaid, glowGreen]}>{fmt(paidOff, symbol)} paid off</Text>
+                  <Text style={s.heroPaid}>{fmt(paidOff, symbol)} paid off</Text>
                 )}
               </View>
             </>
@@ -233,7 +232,7 @@ export default function Debts() {
                 </TouchableOpacity>
               ))}
               <TouchableOpacity style={s.addRow} onPress={openAdd}>
-                <Ionicons name="add-circle-outline" size={16} color="#FFA94D" style={glowAmber} />
+                <Ionicons name="add-circle-outline" size={16} color="#FFA94D" />
                 <Text style={s.addRowText}>Add Debt</Text>
               </TouchableOpacity>
             </>
@@ -365,9 +364,6 @@ const s = StyleSheet.create({
     color: '#FFA94D',
     letterSpacing: -1.2,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(255, 169, 77, 0.25)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 14,
   },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -382,7 +378,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
-  clearedHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 6, marginTop: 4 },
+  clearedHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 18, marginTop: 4 },
   clearedHeaderText: { fontSize: 12, fontWeight: '600', color: '#666', letterSpacing: 0.5, flex: 1 },
   clearedCount: { minWidth: 20, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 9, backgroundColor: '#1C1C1C', alignItems: 'center' },
   clearedCountText: { fontSize: 11, color: '#888', fontWeight: '700', fontVariant: ['tabular-nums'] },
@@ -395,9 +391,8 @@ const s = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 8,
-    paddingRight: 18,
-    paddingVertical: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     borderTopWidth: 1,
     borderTopColor: '#1C1C1C',
   },
@@ -455,9 +450,6 @@ const s = StyleSheet.create({
     color: '#FFA94D',
     fontWeight: '500',
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(255, 169, 77, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   empty: {
@@ -481,9 +473,6 @@ const s = StyleSheet.create({
     fontSize: 14,
     color: '#FFA94D',
     fontWeight: '500',
-    textShadowColor: 'rgba(255, 169, 77, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   // Modal
@@ -538,11 +527,6 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
   deleteLink: {

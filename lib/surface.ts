@@ -7,8 +7,7 @@ import { ViewStyle } from 'react-native';
 //
 //   card: { ...surface, borderRadius: 16, marginBottom: 16 }
 //
-// One source of truth so the look can't drift screen to screen — same
-// rationale as lib/glows.ts for the accent (color) tier.
+// One source of truth so card styling stays consistent across screens.
 export const surface: ViewStyle = {
   backgroundColor: '#171717',
   borderWidth: 1,

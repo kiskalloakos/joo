@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { saveSetup } from '../lib/setup';
 import { saveGlobalCurrency } from '../lib/currency';
-import { glowGreen } from '../lib/glows';
 import {
   getLifetimePackage,
   purchaseLifetime,
@@ -149,7 +148,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
                     <Text style={[s.currencyCode, active && s.choiceTextActive]}>{c.code}</Text>
                     <Text style={s.currencyName}>{c.name}</Text>
                   </View>
-                  {active && <Ionicons name="checkmark-circle" size={20} color="#00C896" style={glowGreen} />}
+                  {active && <Ionicons name="checkmark-circle" size={20} color="#00C896" />}
                 </TouchableOpacity>
               );
             })}
@@ -195,7 +194,6 @@ export default function OnboardingFlow({ onComplete }: Props) {
                 name="checkmark-circle"
                 size={18}
                 color="#00C896"
-                style={glowGreen}
               />
               <Text style={s.benefitText}>{line}</Text>
             </View>
@@ -296,9 +294,6 @@ const s = StyleSheet.create({
   choiceTitle: { fontSize: 15, fontWeight: '600', color: '#888', marginBottom: 3 },
   choiceTextActive: {
     color: '#00C896',
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
   choiceDesc: { fontSize: 12, color: '#3A3A3A', lineHeight: 16, fontWeight: '500' },
 
@@ -323,9 +318,6 @@ const s = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#1F3A30',
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   // Currency rows (unchanged)
@@ -352,11 +344,6 @@ const s = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
   btnDisabled: { opacity: 0.6 },

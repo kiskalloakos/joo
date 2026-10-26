@@ -20,7 +20,6 @@ import { CURRENCIES } from '../../lib/currencies';
 import { surface } from '../../lib/surface';
 import { newId } from '../../lib/dashboard';
 import { feedback } from '../../lib/feedback';
-import { glowGreen } from '../../lib/glows';
 import { showToast } from '../../lib/toast';
 import { parseAmount } from '../../lib/finance';
 import { peekRates, subscribeRates, convert, type Rates } from '../../lib/exchangeRates';
@@ -367,8 +366,8 @@ export default function Projects() {
               );
             })}
             <TouchableOpacity style={s.addCostRow} onPress={() => openAddCost(project.id)}>
-              <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
-              <Text style={[s.addCostText, glowGreen]}>Add cost</Text>
+              <Ionicons name="add-circle-outline" size={16} color="#00C896" />
+              <Text style={s.addCostText}>Add cost</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.editProjectRow} onPress={() => openEditProject(project)}>
               <Ionicons name="pencil-outline" size={13} color="#666" />
@@ -681,9 +680,6 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: '#00C896',
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   cardBody: { borderTopWidth: 1, borderTopColor: '#1C1C1C', paddingHorizontal: 18 },
@@ -831,11 +827,6 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   btnSaveDisabled: { opacity: 0.4 },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },

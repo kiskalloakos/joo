@@ -482,9 +482,6 @@ const s = StyleSheet.create({
     color: '#00C896',
     letterSpacing: -1.2,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.25)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 14,
   },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -494,9 +491,6 @@ const s = StyleSheet.create({
     fontWeight: '700',
     color: '#00C896',
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
   heroSubMeta: { fontSize: 11, color: '#444', fontWeight: '500' },
   heroSubMetaCenter: { fontSize: 11, color: '#444', fontWeight: '500', marginTop: 16, textAlign: 'center' },
@@ -527,9 +521,6 @@ const s = StyleSheet.create({
     color: '#00C896',
     fontWeight: '500',
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
 
   // Yearly breakdown
@@ -562,9 +553,6 @@ const s = StyleSheet.create({
   greenText: {
     color: '#00C896',
     fontWeight: '500',
-    textShadowColor: 'rgba(0, 200, 150, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
   boldText: { color: '#EEE', fontWeight: '600' },
 
@@ -676,11 +664,6 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 });

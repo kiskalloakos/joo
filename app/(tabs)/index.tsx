@@ -29,6 +29,7 @@ import {
   getDashboard,
   peekDashboard,
   refreshDashboard,
+  subscribeDashboard,
   saveAccount as persistAccount,
   deleteAccount as removeAccount,
   saveCost as persistCost,
@@ -38,10 +39,9 @@ import {
   subscribeMonthlyReset,
 } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
-import { glowGreen, glowAmber, glowGreenHero } from '../../lib/glows';
 import { surface } from '../../lib/surface';
 import { feedback } from '../../lib/feedback';
-import { parseAmount } from '../../lib/finance';
+import { isCostDueThisMonth, parseAmount } from '../../lib/finance';
 import {
   Transaction,
   getTransactions,
@@ -57,9 +57,11 @@ import TrialBanner from '../../components/TrialBanner';
 import Recurrings from './recurrings';
 import { registerHomeHeaderActions } from '../../lib/homeHeaderActions';
 import { getTabVisibility, peekTabVisibility, subscribeTabVisibility, type TabVisibility } from '../../lib/tabVisibility';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { uploadReceipt } from '../../lib/receipts';
 import { recognizeReceiptText } from '../../modules/receipt-ocr/src';
+
+const SPENDING_PRESETS = ['Food', 'Groceries', 'Transport', 'Bills', 'Other'] as const;
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -145,9 +147,9 @@ export default function Dashboard() {
     () => peekCurrencySettings().global,
   );
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
-  const [cameraVisible, setCameraVisible] = useState(false);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const cameraRef = useRef<CameraView>(null);
+  const [savingMoney, setSavingMoney] = useState(false);
+  const savingMoneyRef = useRef(false);
+  const receiptTransactionId = useRef<string | null>(null);
 
   const [historyVisible, setHistoryVisible] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>(peekTransactions);
@@ -164,50 +166,37 @@ export default function Dashboard() {
   const [formIncludeInLiquidity, setFormIncludeInLiquidity] = useState(true);
 
   const closeMoneyModal = useCallback(() => {
-    setMoneyModal((prev) => ({ ...prev, visible: false }));
+    if (!savingMoneyRef.current) setMoneyModal((prev) => ({ ...prev, visible: false }));
   }, []);
-
-  const openReceiptCamera = useCallback(async () => {
-    if (!cameraPermission?.granted) {
-      const result = await requestCameraPermission();
-      if (!result.granted) {
-        Alert.alert('Camera access needed', 'Allow camera access in Settings to scan a receipt.');
-        return;
-      }
-    }
-    setCameraVisible(true);
-  }, [cameraPermission?.granted, requestCameraPermission]);
 
   const pickReceiptImage = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: false,
+      base64: true,
       quality: 0.85,
     });
     if (!result.canceled) {
-      const uri = result.assets[0]?.uri ?? null;
+      const asset = result.assets[0];
+      if (asset?.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+        Alert.alert('Image too large', 'Choose an image smaller than 10 MB.');
+        return;
+      }
+      // Picker base64 is JPEG; use it for upload so HEIC photos also work.
+      const uri = asset?.base64 ? `data:image/jpeg;base64,${asset.base64}` : null;
+      if (!uri) {
+        Alert.alert('Could not attach image', 'Please choose another image.');
+        return;
+      }
+      receiptTransactionId.current = null;
       setReceiptUri(uri);
       if (uri) {
         try {
-          const amount = extractReceiptAmount(await recognizeReceiptText(uri));
+          const amount = extractReceiptAmount(await recognizeReceiptText(asset.uri));
           if (amount) setMoneyAmount(amount);
         } catch {
           // OCR is available in the native TestFlight build; attachment still works if it fails.
         }
-      }
-    }
-  }, []);
-
-  const captureReceipt = useCallback(async () => {
-    const photo = await cameraRef.current?.takePictureAsync({ quality: 0.85 });
-    if (photo?.uri) {
-      setReceiptUri(photo.uri);
-      setCameraVisible(false);
-      try {
-        const amount = extractReceiptAmount(await recognizeReceiptText(photo.uri));
-        if (amount) setMoneyAmount(amount);
-      } catch {
-        // OCR is available in the native TestFlight build; attachment still works if it fails.
       }
     }
   }, []);
@@ -242,6 +231,8 @@ export default function Dashboard() {
       ),
     [],
   );
+
+  useEffect(() => subscribeDashboard(applyDashboard), [applyDashboard]);
 
   // Re-render when FX rates land or refresh (so cross-currency totals stay
   // accurate without a manual reload).
@@ -294,10 +285,9 @@ export default function Dashboard() {
       0,
     );
   const currentLiquidity = personalLiquid + includedBusinessLiquid;
-  // Monthly costs only — periodic (quarterly/yearly) bills are kept out of the
-  // dashboard figure on purpose and live in Recurrings' separate section.
+  // Budget the full amount of monthly bills and periodic bills due this month.
   const monthlyCosts = costs.filter(
-    (cost) => cost.accountType !== 'business' && (cost.intervalMonths ?? 1) === 1,
+    (cost) => cost.accountType !== 'business' && isCostDueThisMonth(cost),
   );
   const unpaidCosts = monthlyCosts.reduce(
     (s, c) => c.paid ? s : s + convert(parseAmt(c.amount), c.currency ?? currency, currency, rates.rates),
@@ -382,6 +372,8 @@ export default function Dashboard() {
     feedback.tap();
     setMoneyAmount('');
     setMoneyNote('');
+    setReceiptUri(null);
+    receiptTransactionId.current = null;
     setMoneyCurrency(peekCurrencySettings().global);
     setMoneyModal({ visible: true, mode });
   }, [accounts.length]);
@@ -397,7 +389,7 @@ export default function Dashboard() {
 
   const commitMoney = async (account: Account) => {
     const entered = parseAmt(moneyAmount);
-    if (entered <= 0) return;
+    if (entered <= 0 || savingMoneyRef.current) return;
     // The amount is entered in `moneyCurrency`; the account may hold another.
     // Convert into the account's currency before applying it and logging it.
     const accountCcy = account.currency ?? currency;
@@ -409,14 +401,31 @@ export default function Dashboard() {
       amount: String(parseAmt(account.amount) + delta),
     };
     const note = moneyNote.trim() || null;
-    setAccounts(accounts.map((a) => (a.id === account.id ? updated : a)));
-    setMoneyModal({ visible: false, mode: moneyModal.mode });
-    if (direction === 'in') feedback.moneyIn();
-    else feedback.moneyOut();
-    await Promise.all([
-      persistAccount(updated),
-      logTransaction({ accountId: account.id, amount, direction, kind: 'manual', note }),
-    ]);
+    savingMoneyRef.current = true;
+    setSavingMoney(true);
+    try {
+      let receiptPath: string | null = null;
+      if (receiptUri) {
+        const id = receiptTransactionId.current ?? newId();
+        receiptTransactionId.current = id;
+        receiptPath = await uploadReceipt(receiptUri, id, 'image/jpeg');
+        await logTransaction({ id, accountId: account.id, amount, direction, kind: 'manual', note, receiptPath });
+      }
+      setAccounts(accounts.map((a) => (a.id === account.id ? updated : a)));
+      setMoneyModal({ visible: false, mode: moneyModal.mode });
+      setReceiptUri(null);
+      if (direction === 'in') feedback.moneyIn();
+      else feedback.moneyOut();
+      await Promise.all([
+        persistAccount(updated),
+        ...(!receiptPath ? [logTransaction({ accountId: account.id, amount, direction, kind: 'manual', note })] : []),
+      ]);
+    } catch (error) {
+      Alert.alert('Could not save', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      savingMoneyRef.current = false;
+      setSavingMoney(false);
+    }
   };
 
   // ── Edit / delete a logged transaction (from the statement) ───────────────
@@ -585,8 +594,8 @@ export default function Dashboard() {
                 </TouchableOpacity>
               ))}
               <TouchableOpacity style={s.addCostRow} onPress={openAddAccount}>
-                <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
-                <Text style={[s.addCostText, glowGreen]}>Add Account</Text>
+                <Ionicons name="add-circle-outline" size={16} color="#00C896" />
+                <Text style={s.addCostText}>Add Account</Text>
               </TouchableOpacity>
             </>
           )}
@@ -738,10 +747,6 @@ export default function Dashboard() {
                   autoFocus
                 />
                 <View style={s.receiptActions}>
-                  <TouchableOpacity style={s.receiptButton} onPress={openReceiptCamera}>
-                    <Ionicons name="camera-outline" size={17} color="#00C896" />
-                    <Text style={s.receiptButtonText}>Scan receipt</Text>
-                  </TouchableOpacity>
                   <TouchableOpacity style={s.receiptButton} onPress={pickReceiptImage}>
                     <Ionicons name="image-outline" size={17} color="#00C896" />
                     <Text style={s.receiptButtonText}>Attach image</Text>
@@ -782,6 +787,39 @@ export default function Dashboard() {
                   ))}
                 </View>
 
+                {moneyModal.mode === 'remove' && (
+                  <>
+                    <Text style={s.inputLabel}>Quick note</Text>
+                    <View style={s.ccyPickerContent}>
+                      {SPENDING_PRESETS.map((preset) => {
+                        const selected = moneyNote.trim().toLowerCase() === preset.toLowerCase();
+                        return (
+                          <TouchableOpacity
+                            key={preset}
+                            style={[s.ccyPill, selected && s.ccyPillActive]}
+                            onPress={() => {
+                              feedback.select();
+                              setMoneyNote(selected ? '' : preset);
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={preset}
+                            accessibilityState={{ selected }}
+                          >
+                            <Text
+                              style={[s.ccyPillText, selected && s.ccyPillTextActive]}
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              minimumFontScale={0.8}
+                            >
+                              {preset}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
                 <Text style={s.inputLabel}>Note (optional)</Text>
                 <TextInput
                   style={s.input}
@@ -794,7 +832,7 @@ export default function Dashboard() {
 
                 <Text style={s.inputLabel}>Account</Text>
                 <Text style={s.pickerSub}>
-                  {parseAmt(moneyAmount) > 0
+                  {savingMoney ? 'Saving transaction and attachment...' : parseAmt(moneyAmount) > 0
                     ? moneyModal.mode === 'add'
                       ? 'Tap an account to add this to it.'
                       : 'Tap an account to remove from.'
@@ -810,7 +848,7 @@ export default function Dashboard() {
                   const delta = moneyModal.mode === 'add' ? converted : -converted;
                   const newBalance = parseAmt(account.amount) + delta;
                   const goesNegative = newBalance < 0;
-                  const disabled = entered <= 0;
+                  const disabled = entered <= 0 || savingMoney;
                   const isAdd = moneyModal.mode === 'add';
                   return (
                     <TouchableOpacity
@@ -833,7 +871,6 @@ export default function Dashboard() {
                         name={isAdd ? 'add-circle-outline' : 'remove-circle-outline'}
                         size={18}
                         color={isAdd ? '#00C896' : '#FFA94D'}
-                        style={isAdd ? glowGreen : glowAmber}
                       />
                     </TouchableOpacity>
                   );
@@ -844,24 +881,6 @@ export default function Dashboard() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
-      <Modal visible={cameraVisible} animationType="slide">
-        <View style={s.cameraScreen}>
-          <CameraView ref={cameraRef} style={s.camera} facing="back">
-            <View style={s.cameraGuide} />
-            <View style={s.cameraControls}>
-              <TouchableOpacity style={s.cameraCancel} onPress={() => setCameraVisible(false)}>
-                <Text style={s.cameraCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.captureButton} onPress={captureReceipt} accessibilityLabel="Capture receipt">
-                <View style={s.captureButtonInner} />
-              </TouchableOpacity>
-              <View style={s.cameraSpacer} />
-            </View>
-          </CameraView>
-        </View>
-      </Modal>
-
 
       {/* Money log — bank-statement-style read-only history */}
       <Modal visible={historyVisible} transparent animationType="slide">
@@ -974,11 +993,6 @@ const s = StyleSheet.create({
     borderColor: '#1F3A30',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 3,
   },
   headerRemoveBtn: {
     width: 40,
@@ -989,11 +1003,6 @@ const s = StyleSheet.create({
     borderColor: '#3A2A18',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FFA94D',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 3,
   },
   scroll: { paddingHorizontal: 16, paddingTop: 120 },
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
@@ -1005,9 +1014,6 @@ const s = StyleSheet.create({
     color: '#00C896',
     letterSpacing: -1.2,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.25)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 14,
   },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -1173,15 +1179,6 @@ const s = StyleSheet.create({
   receiptPreviewCopy: { flex: 1, gap: 3 },
   receiptAttached: { color: '#FFF', fontSize: 13, fontWeight: '600' },
   receiptHint: { color: '#777', fontSize: 11 },
-  cameraScreen: { flex: 1, backgroundColor: '#000' },
-  camera: { flex: 1 },
-  cameraGuide: { position: 'absolute', top: '25%', left: '10%', right: '10%', height: '45%', borderWidth: 2, borderColor: 'rgba(255,255,255,0.75)', borderRadius: 18 },
-  cameraControls: { position: 'absolute', left: 0, right: 0, bottom: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 28 },
-  cameraCancel: { minWidth: 72, paddingVertical: 10 },
-  cameraCancelText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-  cameraSpacer: { width: 72 },
-  captureButton: { width: 74, height: 74, borderRadius: 37, borderWidth: 4, borderColor: '#FFF', alignItems: 'center', justifyContent: 'center' },
-  captureButtonInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFF' },
   row2col: { flexDirection: 'row', gap: 12 },
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {
@@ -1198,11 +1195,6 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 

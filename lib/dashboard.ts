@@ -61,11 +61,22 @@ export function peekDashboard(): DashboardData {
 }
 
 export async function getDashboard(): Promise<DashboardData> {
-  return load<DashboardData>(NS, EMPTY);
+  return peek<DashboardData | undefined>(NS, undefined) ?? load<DashboardData>(NS, EMPTY);
+}
+
+const dashboardListeners = new Set<(data: DashboardData) => void>();
+
+export function subscribeDashboard(fn: (data: DashboardData) => void): () => void {
+  dashboardListeners.add(fn);
+  return () => { dashboardListeners.delete(fn); };
 }
 
 async function persistCache(data: DashboardData): Promise<void> {
-  await save(NS, data);
+  // save updates the memory cache synchronously; notify screens before disk or
+  // network work finishes so embedded bills and the balance stay in step.
+  const writing = save(NS, data);
+  dashboardListeners.forEach((fn) => fn(data));
+  await writing;
 }
 
 // ── Refresh from Supabase ──────────────────────────────────
@@ -169,7 +180,8 @@ export function subscribeMonthlyReset(
 
 // ── Account ops ─────────────────────────────────────────────
 export async function saveAccount(account: Account): Promise<void> {
-  const cache = await getDashboard();
+  await getDashboard();
+  const cache = peekDashboard();
   const accounts = cache.accounts.find((a) => a.id === account.id)
     ? cache.accounts.map((a) => (a.id === account.id ? account : a))
     : [...cache.accounts, account];
@@ -192,7 +204,8 @@ export async function saveAccount(account: Account): Promise<void> {
 }
 
 export async function deleteAccount(id: string): Promise<void> {
-  const cache = await getDashboard();
+  await getDashboard();
+  const cache = peekDashboard();
   await persistCache({ ...cache, accounts: cache.accounts.filter((a) => a.id !== id) });
 
   const uid = await userId();
@@ -202,7 +215,8 @@ export async function deleteAccount(id: string): Promise<void> {
 
 // ── Cost ops ────────────────────────────────────────────────
 export async function saveCost(cost: Cost): Promise<void> {
-  const cache = await getDashboard();
+  await getDashboard();
+  const cache = peekDashboard();
   const costs = cache.costs.find((c) => c.id === cost.id)
     ? cache.costs.map((c) => (c.id === cost.id ? cost : c))
     : [...cache.costs, cost];
@@ -231,7 +245,8 @@ export async function saveCost(cost: Cost): Promise<void> {
 }
 
 export async function deleteCost(id: string): Promise<void> {
-  const cache = await getDashboard();
+  await getDashboard();
+  const cache = peekDashboard();
   await persistCache({ ...cache, costs: cache.costs.filter((c) => c.id !== id) });
 
   const uid = await userId();
